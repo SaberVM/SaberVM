@@ -2,6 +2,10 @@
 mod header;
 
 use crate::header::OpCode1::*;
+use crate::header::Stmt1::*;
+use crate::header::CapabilityPool;
+use crate::header::TypePool;
+use crate::header::TypeListPool;
 mod parse;
 mod verify;
 
@@ -10,7 +14,7 @@ fn main() {
     // dbg!(&code);
     // let prog = parse::go(&code);
     // dbg!(&prog);
-    let stmt = &header::Stmt1::Func1(0, vec![
+    let stmt = &Func1(0, vec![
         Op1Region(),
         Op1Cap(),
         Op1CTGet(0),
@@ -50,9 +54,9 @@ fn main() {
         Op1Clean(3),
         Op1Call()
     ]);
-    let cap_pool = header::CapabilityPool(vec![]);
-    let type_pool = header::TypePool(vec![]);
-    let tl_pool = header::TypeListPool(vec![]);
+    let cap_pool = CapabilityPool(vec![]);
+    let type_pool = TypePool(vec![]);
+    let tl_pool = TypeListPool(vec![]);
 
     let prog2 = verify::go(stmt, cap_pool, type_pool, tl_pool);
     dbg!(prog2);
