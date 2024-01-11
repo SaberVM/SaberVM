@@ -110,7 +110,7 @@ impl TypePool {
     let TypePool(v) = self;
     let idx = v.len();
     v.push(t);
-    TypeRef(idx.try_into().expect("too many capabilities in the pool"))
+    TypeRef(idx.try_into().expect("too many types in the pool"))
   }
 }
 
@@ -127,7 +127,7 @@ impl TypeListPool {
     let TypeListPool(v) = self;
     let idx = v.len();
     v.push(ts);
-    TypeListRef(idx.try_into().expect("too many capabilities in the pool"))
+    TypeListRef(idx.try_into().expect("too many type lists in the pool"))
   }
 }
 
