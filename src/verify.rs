@@ -94,7 +94,7 @@ pub fn first_pass<'a>(
                     let mb_r = ct_stack.pop();
                     match mb_r {
                         Some(CTRegion(r)) => {
-                            ct_stack.push(CTCapability(cap_pool.add(vec![ReadOnly(r)])))
+                            ct_stack.push(CTCapability(cap_pool.add(vec![NotOwned(r)])))
                         }
                         _ => return Err(3),
                     }
@@ -361,7 +361,7 @@ pub fn first_pass<'a>(
 
 pub fn capable(r: &Region, c: &Capability, cap_pool: &CapabilityPool) -> bool {
     match c {
-        Owned(r2) | ReadOnly(r2) if *r == *r2 => true,
+        Owned(r2) | NotOwned(r2) if *r == *r2 => true,
         CapVarBounded(_, cr) => cap_pool.get(*cr).iter().any(|c| capable(r, c, cap_pool)),
         _ => false
     }

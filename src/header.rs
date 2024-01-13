@@ -80,7 +80,7 @@ pub enum Region {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Capability {
     Owned(Region),
-    ReadOnly(Region),
+    NotOwned(Region),
     CapVar(Id),
     CapVarBounded(Id, CapabilityRef),
 }
@@ -131,7 +131,7 @@ pub fn pretty_cap(c: Capability) -> String {
         Capability::CapVar(id) => "c".to_owned() + &id.1.to_string(),
         Capability::CapVarBounded(id, _cr) => "c".to_owned() + &id.1.to_string(),
         Capability::Owned(r) => "1".to_owned() + &pretty_region(r),
-        Capability::ReadOnly(r) => "+".to_owned() + &pretty_region(r)
+        Capability::NotOwned(r) => "+".to_owned() + &pretty_region(r)
     }
 }
 
