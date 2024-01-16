@@ -69,7 +69,7 @@ To pick this apart a little, the function is quantified over a region, a capabil
 
 In summary, that type says that the function takes a value of type `t`, a region `r`, and a continuation that expects a value of type `(t, t)` allocated in region `r`. It also requires that `r` hasn't been freed. That should seem like a reasonable type for the duplicate function. The richness of the information present in the type should hopefully justify how many compile-time instructions are used to construct it. Resorting too much to type inference would hurt the performance of the verifier asymptotically, so in the tradeoff between binary size and verifier performance I chose a faster verifier. One- and two-byte instructions helps the binary size a lot already.
 
-To see how writing these 70ish bytes looks in practice, go to [example.md](https://github.com/RyanBrewer317/SVM/blob/main/src/example.md) for the example. Note that it also outputs the instructions the VM will execute, with the compile-time stuff all erased.
+To see how writing these 70ish bytes looks in practice, go to [example.md](https://github.com/RyanBrewer317/SVM/blob/main/example.md) for the example. Note that it also outputs the instructions the VM will execute, with the compile-time stuff all erased.
 
 This is very WIP; the purpose of this MVP is not to ship it per se, but mostly to play with the system and figure out what breaking changes need to be made. 
 
