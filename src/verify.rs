@@ -6,6 +6,8 @@ use crate::header::CTStackVal::*;
 use crate::header::Capability;
 use crate::header::Capability::*;
 use crate::header::CapabilityPool;
+use crate::header::Error;
+use crate::header::Error::*;
 use crate::header::Id;
 use crate::header::Kind::*;
 use crate::header::OpCode1::*;
@@ -28,12 +30,12 @@ pub fn go(
     cap_pool: &mut CapabilityPool,
     type_pool: &mut TypePool,
     tl_pool: &mut TypeListPool,
-) -> Result<Vec<Stmt2>, i32> {
+) -> Result<Vec<Stmt2>, Error> {
     let mut out: Vec<Stmt2> = vec![];
     let stmts2: Vec<(Stmt2, Constraints)> = stmts
         .iter()
         .map(|stmt| pass(stmt, cap_pool, type_pool, tl_pool))
-        .collect::<Result<Vec<_>,i32>>()
+        .collect::<Result<Vec<_>, Error>>()
         .unwrap();
     let mut types: HashMap<i32, Type> = HashMap::new();
     for pair in &stmts2 {
@@ -52,14 +54,14 @@ pub fn go(
 
 type StackType = VecDeque<TypeRef>;
 type CTStackType = Vec<CTStackVal>;
-type Constraints = HashMap<i32,(StackType,CTStackType)>;
+type Constraints = HashMap<i32, (StackType, CTStackType)>;
 
 fn pass(
     stmt: &Stmt1,
     cap_pool: &mut CapabilityPool,
     type_pool: &mut TypePool,
     tl_pool: &mut TypeListPool,
-) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>), i32> {
+) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>), Error> {
     let mut ct_stack: CTStackType = vec![];
     let Func1(label, ops) = stmt;
     let mut iter = ops.iter();
@@ -78,15 +80,14 @@ fn pass(
             None => break,
             Some(op) => match op {
                 Op1Req() => match ct_stack.pop() {
-                    None => return Err(0),
+                    None => return Err(TypeErrorEmptyCTStack(*op)),
                     Some(CTType(t)) => {
                         arg_types.push(t);
                         stack_type.push_front(t);
                     }
                     Some(CTCapability(c)) => capabilities.extend(cap_pool.get(c)),
                     Some(x) => {
-                        dbg!(x);
-                        return Err(1);
+                        return Err(KindErrorReq(x));
                     }
                 },
                 Op1Region() => {
@@ -111,7 +112,8 @@ fn pass(
                             cvars.push(var);
                             fresh_id += 1;
                         }
-                        _ => return Err(2),
+                        Some(x) => return Err(KindError(*op, KCapability(None), x)),
+                        None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
                 }
                 Op1Own() => {
@@ -120,7 +122,8 @@ fn pass(
                         Some(CTRegion(r)) => {
                             ct_stack.push(CTCapability(cap_pool.add(vec![Owned(r)])))
                         }
-                        _ => return Err(3),
+                        Some(x) => return Err(KindError(*op, KRegion, x)),
+                        None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
                 }
                 Op1Read() => {
@@ -129,7 +132,8 @@ fn pass(
                         Some(CTRegion(r)) => {
                             ct_stack.push(CTCapability(cap_pool.add(vec![NotOwned(r)])))
                         }
-                        _ => return Err(3),
+                        Some(x) => return Err(KindError(*op, KRegion, x)),
+                        None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
                 }
                 Op1Both() => {
@@ -145,17 +149,20 @@ fn pass(
                                         cap_pool.add([&c1[..], &c2[..]].concat()),
                                     ))
                                 }
-                                _ => return Err(5),
+                                Some(x) => return Err(KindError(*op, KCapability(None), x)),
+                                None => return Err(TypeErrorEmptyCTStack(*op)),
                             }
                         }
-                        _ => return Err(4),
+                        Some(x) => return Err(KindError(*op, KCapability(None), x)),
+                        None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
                 }
                 Op1Handle() => {
                     let mb_r = ct_stack.pop();
                     match mb_r {
                         Some(CTRegion(r)) => ct_stack.push(CTType(type_pool.add(THandle(r)))),
-                        _ => return Err(6),
+                        Some(x) => return Err(KindError(*op, KRegion, x)),
+                        None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
                 }
                 Op1i32() => ct_stack.push(CTType(type_pool.add(Ti32()))),
@@ -164,7 +171,8 @@ fn pass(
                     let mb_t = ct_stack.pop();
                     match mb_t {
                         Some(CTType(t)) => ct_stack.push(CTType(type_pool.add(TMutable(t)))),
-                        _ => return Err(7),
+                        Some(x) => return Err(KindError(*op, KType, x)),
+                        None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
                 }
                 Op1Tuple(n) => {
@@ -173,7 +181,8 @@ fn pass(
                         let mb_t = ct_stack.pop();
                         match mb_t {
                             Some(CTType(t)) => ts.push(t),
-                            _ => return Err(8),
+                            Some(x) => return Err(KindError(*op, KType, x)),
+                            None => return Err(TypeErrorEmptyCTStack(*op)),
                         }
                     }
                     let mb_r = ct_stack.pop();
@@ -181,17 +190,16 @@ fn pass(
                         Some(CTRegion(r)) => {
                             ct_stack.push(CTType(type_pool.add(TTuple(tl_pool.add(ts), r))))
                         }
-                        x => {
-                            dbg!(x);
-                            return Err(9);
-                        }
+                        Some(x) => return Err(KindError(*op, KRegion, x)),
+                        None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
                 }
                 Op1Arr() => {
                     let mb_t = ct_stack.pop();
                     match mb_t {
                         Some(CTType(t)) => ct_stack.push(CTType(type_pool.add(TArray(t)))),
-                        _ => return Err(10),
+                        Some(x) => return Err(KindError(*op, KType, x)),
+                        None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
                 }
                 Op1All() => {
@@ -207,14 +215,15 @@ fn pass(
                 Op1Emos() => {
                     let mb_var = exist_stack.pop();
                     match mb_var {
-                        None => return Err(11),
+                        None => return Err(TypeErrorEmptyExistStack(*op)),
                         Some(id) => {
                             let mb_t = ct_stack.pop();
                             match mb_t {
                                 Some(CTType(t)) => {
                                     ct_stack.push(CTType(type_pool.add(TExists(id, t))))
                                 }
-                                _ => return Err(12),
+                                Some(x) => return Err(KindError(*op, KType, x)),
+                                None => return Err(TypeErrorEmptyCTStack(*op)),
                             }
                         }
                     }
@@ -225,7 +234,8 @@ fn pass(
                         let mb_t = ct_stack.pop();
                         match mb_t {
                             Some(CTType(t)) => ts.push(t),
-                            _ => return Err(13),
+                            Some(x) => return Err(KindError(*op, KType, x)),
+                            None => return Err(TypeErrorEmptyCTStack(*op)),
                         }
                     }
                     let mb_c = ct_stack.pop();
@@ -233,23 +243,20 @@ fn pass(
                         Some(CTCapability(c)) => {
                             ct_stack.push(CTType(type_pool.add(TFunc(c, tl_pool.add(ts)))))
                         }
-                        x => {
-                            dbg!(x);
-                            return Err(14);
-                        }
+                        Some(x) => return Err(KindError(*op, KCapability(None), x)),
+                        None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
                 }
                 Op1CTGet(n) => {
                     let l = ct_stack.len();
+                    if l == 0 {
+                        return Err(TypeErrorEmptyCTStack(*op));
+                    }
                     let i = usize::from(*n);
-                    if l == 0 || l - 1 < i {
-                        return Err(33);
+                    if l - 1 < i {
+                        return Err(TypeErrorParamOutOfRange(*op));
                     }
-                    let mb_x = ct_stack.get(l - i - 1);
-                    match mb_x {
-                        Some(x) => ct_stack.push(*x),
-                        None => return Err(15),
-                    }
+                    ct_stack.push(*ct_stack.get(l - i - 1).unwrap());
                 }
                 Op1CTPop() => {
                     ct_stack.pop();
@@ -261,21 +268,21 @@ fn pass(
                             TExists(_id, tr) => {
                                 stack_type.push_back(*tr) // simply remove the quantifier, unbinding its variable
                             }
-                            _ => return Err(31),
+                            _ => return Err(TypeErrorExistentialExpected(tr)),
                         },
-                        _ => return Err(32),
+                        None => return Err(TypeErrorEmptyStack(*op)),
                     }
                 }
                 Op1Get(n) => {
                     let l = stack_type.len();
+                    if l == 0 {
+                        return Err(TypeErrorEmptyStack(*op));
+                    }
                     let i = usize::from(*n);
-                    if l == 0 || l - 1 < i {
-                        return Err(34);
+                    if l - 1 < i {
+                        return Err(TypeErrorParamOutOfRange(*op));
                     }
-                    match stack_type.get(l - 1 - i) {
-                        Some(t) => stack_type.push_back(*t),
-                        _ => return Err(17),
-                    }
+                    stack_type.push_back(*stack_type.get(l - 1 - i).unwrap());
                     out.push(Op2Get(*n))
                 }
                 Op1Init(n) => {
@@ -284,27 +291,28 @@ fn pass(
                     match mb_tpl {
                         Some(tpl) => match type_pool.get(tpl) {
                             TTuple(ts, r) => match tl_pool.get(*ts).get(usize::from(*n)) {
-                                None => return Err(20),
+                                None => return Err(TypeErrorParamOutOfRange(*op)),
                                 Some(formal) => match mb_val {
-                                    None => return Err(21),
+                                    None => return Err(TypeErrorEmptyStack(*op)),
                                     Some(actual) => {
                                         if capabilities.iter().all(|c| !capable(r, c, &cap_pool)) {
-                                            println!("Type error! Incapable init");
-                                            dbg!(r, &capabilities);
-                                            return Err(35);
+                                            return Err(CapabilityError(
+                                                *op,
+                                                cap_pool.add(capabilities),
+                                            ));
                                         }
                                         if type_pool.get(*formal) == type_pool.get(actual) {
                                             stack_type.push_back(tpl)
                                         } else {
                                             println!("Type error! init is setting a tuple field of the wrong type!");
-                                            return Err(22);
+                                            return Err(TypeErrorInit(*formal, actual));
                                         }
                                     }
                                 },
                             },
-                            _ => return Err(18),
+                            _ => return Err(TypeErrorTupleExpected(*op, tpl)),
                         },
-                        None => return Err(19),
+                        None => return Err(TypeErrorEmptyStack(*op)),
                     }
                     out.push(Op2Init(*n))
                 }
@@ -312,24 +320,23 @@ fn pass(
                     let mb_t = ct_stack.pop();
                     let t = match mb_t {
                         Some(CTType(t)) => t,
-                        _ => return Err(23),
+                        Some(x) => return Err(KindError(*op, KType, x)),
+                        None => return Err(TypeErrorEmptyCTStack(*op)),
                     };
                     let mb_rhandle = stack_type.pop_back();
                     match mb_rhandle {
-                        Some(t) => match type_pool.get(t) {
+                        Some(tr) => match type_pool.get(tr) {
                             THandle(r) => {
                                 if capabilities.iter().all(|c| !capable(r, c, &cap_pool)) {
-                                    println!("Type error! Incapable malloc");
-                                    dbg!(r, &capabilities);
-                                    return Err(36);
+                                    return Err(CapabilityError(*op, cap_pool.add(capabilities)));
                                 }
                             }
                             _ => {
                                 println!("Type error! malloc expects a region handle!");
-                                return Err(25);
+                                return Err(TypeErrorRegionHandleExpected(*op, tr));
                             }
                         },
-                        _ => return Err(24),
+                        None => return Err(TypeErrorEmptyStack(*op)),
                     }
                     stack_type.push_back(t);
                     out.push(Op2Malloc(4)) // TODO: use actual size in bytes of t
@@ -339,19 +346,17 @@ fn pass(
                     match mb_tpl {
                         Some(tpl) => match type_pool.get(tpl) {
                             TTuple(ts, r) => match tl_pool.get(*ts).get(usize::from(*n)) {
-                                None => return Err(26),
+                                None => return Err(TypeErrorParamOutOfRange(*op)),
                                 Some(t) => {
                                     if capabilities.iter().all(|c| !capable(r, c, &cap_pool)) {
-                                        println!("Type error! Incapable region init");
-                                        dbg!(r, &capabilities);
-                                        return Err(37);
+                                        return Err(CapabilityError(*op, cap_pool.add(capabilities)));
                                     }
                                     stack_type.push_back(*t);
                                 }
                             },
-                            _ => return Err(27),
+                            _ => return Err(TypeErrorTupleExpected(*op, tpl)),
                         },
-                        None => return Err(28),
+                        None => return Err(TypeErrorEmptyStack(*op)),
                     }
                     out.push(Op2Proj(*n))
                 }
@@ -359,7 +364,7 @@ fn pass(
                     let idx = i32::from(*n);
                     let diff = (stack_type.len() as i32) - 1 - idx;
                     if diff < 0 {
-                        return Err(29);
+                        return Err(TypeErrorParamOutOfRange(*op));
                     }
                     let count = (if diff > 0xFF { 0xFF } else { diff }) as u8; // definitely won't lose information, since its in (0, 255)
                     for _ in 0..count {
@@ -377,12 +382,12 @@ fn pass(
                                 TGuess(l) => {
                                     constraints.insert(*l, (stack_type.clone(), ct_stack.clone()));
                                 }
-                                TForall(id,k,tr) => todo!(),
-                                TFunc(cr,tsr) => todo!(),
-                                _ => return Err(39)
+                                TForall(id, k, tr) => todo!(),
+                                TFunc(cr, tsr) => todo!(),
+                                _ => return Err(TypeErrorFunctionExpected(*op, tr)),
                             }
                         }
-                        None => return Err(38)
+                        None => return Err(TypeErrorEmptyStack(*op)),
                     }
                     out.push(Op2Call())
                 }
@@ -390,7 +395,7 @@ fn pass(
         }
     }
     if exist_stack.len() > 0 {
-        return Err(16);
+        return Err(TypeErrorNonEmptyExistStack());
     }
     let t = tvars.iter().fold(
         TFunc(cap_pool.add(capabilities), tl_pool.add(arg_types)),

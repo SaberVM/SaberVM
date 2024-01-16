@@ -1,9 +1,11 @@
+use crate::header::Error;
+use crate::header::Error::*;
 use crate::header::OpCode1;
 use crate::header::OpCode1::*;
 use crate::header::Stmt1;
 use crate::header::Stmt1::*;
 
-fn lex(istream: &Vec<u8>) -> Result<Vec<OpCode1>, i32> {
+fn lex(istream: &Vec<u8>) -> Result<Vec<OpCode1>, Error> {
     let mut i = istream.iter();
     let mut out = vec![];
     i.next();
@@ -27,7 +29,7 @@ fn lex(istream: &Vec<u8>) -> Result<Vec<OpCode1>, i32> {
                 0x0A => Op1End(),
                 0x0B => Op1Mut(),
                 0x0C => match i.next() {
-                    None => return Err(1),
+                    None => return Err(SyntaxErrorParamNeeded(*byte)),
                     Some(n) => Op1Tuple(*n),
                 },
                 0x0D => Op1Arr(),
@@ -35,34 +37,34 @@ fn lex(istream: &Vec<u8>) -> Result<Vec<OpCode1>, i32> {
                 0x0F => Op1Some(),
                 0x10 => Op1Emos(),
                 0x11 => match i.next() {
-                    None => return Err(2),
+                    None => return Err(SyntaxErrorParamNeeded(*byte)),
                     Some(n) => Op1Func(*n),
                 },
                 0x12 => match i.next() {
-                    None => return Err(3),
+                    None => return Err(SyntaxErrorParamNeeded(*byte)),
                     Some(n) => Op1CTGet(*n),
                 },
                 0x13 => Op1CTPop(),
                 0x14 => Op1Unpack(),
                 0x15 => match i.next() {
-                    None => return Err(5),
+                    None => return Err(SyntaxErrorParamNeeded(*byte)),
                     Some(n) => Op1Get(*n),
                 },
                 0x16 => match i.next() {
-                    None => return Err(6),
+                    None => return Err(SyntaxErrorParamNeeded(*byte)),
                     Some(n) => Op1Init(*n),
                 },
                 0x17 => Op1Malloc(),
                 0x18 => match i.next() {
-                    None => return Err(7),
+                    None => return Err(SyntaxErrorParamNeeded(*byte)),
                     Some(n) => Op1Proj(*n),
                 },
                 0x19 => match i.next() {
-                    None => return Err(8),
+                    None => return Err(SyntaxErrorParamNeeded(*byte)),
                     Some(n) => Op1Clean(*n),
                 },
                 0x1A => Op1Call(),
-                _ => return Err(0),
+                op => return Err(SyntaxErrorUnknownOp(*op)),
             }),
         }
     }
@@ -89,7 +91,7 @@ fn parse(tokens: &Vec<OpCode1>) -> Vec<Stmt1> {
     out
 }
 
-pub fn go(istream: &Vec<u8>) -> Result<Vec<Stmt1>, i32> {
+pub fn go(istream: &Vec<u8>) -> Result<Vec<Stmt1>, Error> {
     let tokens = lex(istream)?;
     Ok(parse(&tokens))
 }

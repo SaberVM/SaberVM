@@ -1,3 +1,4 @@
+mod error_handling;
 mod header;
 mod parse;
 mod verify;
@@ -7,39 +8,39 @@ use std::fs;
 use crate::header::pretty_op2;
 use crate::header::pretty_t;
 use crate::header::CapabilityPool;
+use crate::header::Error;
 use crate::header::Stmt2::*;
 use crate::header::TypeListPool;
 use crate::header::TypePool;
 
-fn main() {
-    let code = fs::read("bin.svm").unwrap();
-    let prog = parse::go(&code);
-    match prog {
-        Err(n) => {
-            dbg!(n);
-        }
-        Ok(prog) => {
-            let mut cap_pool = CapabilityPool(vec![]);
-            let mut type_pool = TypePool(vec![]);
-            let mut tl_pool = TypeListPool(vec![]);
+fn go(
+    code: &Vec<u8>,
+    mut cap_pool: &mut CapabilityPool,
+    mut type_pool: &mut TypePool,
+    mut tl_pool: &mut TypeListPool,
+) -> Result<(), Error> {
+    let prog = parse::go(code)?;
 
-            let prog2 = verify::go(prog, &mut cap_pool, &mut type_pool, &mut tl_pool);
-            match prog2 {
-                Ok(stmts) => {
-                    let p = &stmts[0];
-                    let Func2(_, t, ops) = p;
-                    dbg!(pretty_t(&t, &type_pool, &tl_pool, &cap_pool));
-                    for op in ops {
-                        println!("{}", pretty_op2(&op))
-                    }
-                }
-                Err(e) => {
-                    println!("Error!");
-                    dbg!(e);
-                }
-            }
-        }
+    let stmts = verify::go(prog, &mut cap_pool, &mut type_pool, &mut tl_pool)?;
+    let p = &stmts[0];
+    let Func2(_, t, ops) = p;
+    dbg!(pretty_t(&t, &type_pool, &tl_pool, &cap_pool));
+    for op in ops {
+        println!("{}", pretty_op2(&op))
     }
+    Ok(())
+}
+
+fn main() {
+    let mut cap_pool = CapabilityPool(vec![]);
+    let mut type_pool = TypePool(vec![]);
+    let mut tl_pool = TypeListPool(vec![]);
+
+    let code = fs::read("bin.svm").unwrap();
+
+    let res = go(&code, &mut cap_pool, &mut type_pool, &mut tl_pool);
+
+    error_handling::handle(res, &cap_pool, &type_pool, &tl_pool);
 }
 
 // I keep this here for documentation:

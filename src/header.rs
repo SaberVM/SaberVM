@@ -112,7 +112,7 @@ pub enum Type {
     TForall(Id, Kind, TypeRef),
     TExists(Id, TypeRef),
     TFunc(CapabilityRef, TypeListRef),
-    TGuess(i32)
+    TGuess(i32),
 }
 
 pub fn pretty_region(r: Region) -> String {
@@ -206,95 +206,10 @@ pub fn pretty_t(
                 + "]("
                 + &pretty_ts(ts, type_pool, tl_pool, cap_pool)
                 + ")->0"
-        },
-        Type::TGuess(_) => panic!("type-checking artifact lasted too long")
+        }
+        Type::TGuess(_) => panic!("type-checking artifact lasted too long"),
     }
 }
-
-// pub enum ActualType {
-//     ATi32(),
-//     ATHandle(Region),
-//     ATMutable(Box<ActualType>),
-//     ATTuple(Vec<ActualType>, Region),
-//     ATArray(Box<ActualType>),
-//     ATVar(Id),
-//     ATForall(Id, Box<ActualType>),
-//     ATExists(Id, Box<ActualType>),
-//     ATFunc(CapabilityRef, Vec<ActualType>),
-// }
-
-// pub fn actualize(t: TypeRef, type_pool: &TypePool, tl_pool: &TypeListPool) -> ActualType {
-//     match type_pool.get(t) {
-//         Type::Ti32() => ActualType::ATi32(),
-//         Type::THandle(r) => ActualType::ATHandle(*r),
-//         Type::TMutable(tr) => ActualType::ATMutable(Box::new(actualize(*tr, &type_pool, &tl_pool))),
-//         Type::TTuple(tsr, r) => {
-//             let mut ts = vec![];
-//             for tr in tl_pool.get(*tsr) {
-//                 ts.push(actualize(*tr, &type_pool, &tl_pool))
-//             }
-//             ActualType::ATTuple(ts, *r)
-//         }
-//         Type::TArray(tr) => ActualType::ATArray(Box::new(actualize(*tr, &type_pool, &tl_pool))),
-//         Type::TVar(id) => ActualType::ATVar(*id),
-//         Type::TForall(id, tr) => {
-//             ActualType::ATForall(*id, Box::new(actualize(*tr, &type_pool, &tl_pool)))
-//         }
-//         Type::TExists(id, tr) => {
-//             ActualType::ATExists(*id, Box::new(actualize(*tr, &type_pool, &tl_pool)))
-//         }
-//         Type::TFunc(c, tsr) => {
-//             let mut ts = vec![];
-//             for tr in tl_pool.get(*tsr) {
-//                 ts.push(actualize(*tr, &type_pool, &tl_pool))
-//             }
-//             ActualType::ATFunc(*c, ts)
-//         }
-//     }
-// }
-
-// pub fn substitute(old: Id, new: Id, t: ActualType) -> ActualType {
-//     match t {
-//         ActualType::ATVar(id) => {
-//             if id == old {
-//                 ActualType::ATVar(new)
-//             } else {
-//                 t
-//             }
-//         }
-//         ActualType::ATi32() | ActualType::ATHandle(_) => t,
-//         ActualType::ATMutable(tr) => ActualType::ATMutable(Box::new(substitute(old, new, *tr))),
-//         ActualType::ATArray(tr) => ActualType::ATArray(Box::new(substitute(old, new, *tr))),
-//         ActualType::ATTuple(ts, r) => {
-//             let mut ts2 = vec![];
-//             for t in ts {
-//                 ts2.push(substitute(old, new, t))
-//             }
-//             ActualType::ATTuple(ts2, r)
-//         }
-//         ActualType::ATForall(id, tr2) => {
-//             if id == old {
-//                 t
-//             } else {
-//                 ActualType::ATForall(id, Box::new(substitute(old, new, *tr2)))
-//             }
-//         }
-//         ActualType::ATExists(id, tr2) => {
-//             if id == old {
-//                 t
-//             } else {
-//                 ActualType::ATExists(id, Box::new(substitute(old, new, *tr2)))
-//             }
-//         }
-//         ActualType::ATFunc(c, ts) => {
-//             let mut ts2 = vec![];
-//             for t in ts {
-//                 ts2.push(substitute(old, new, t))
-//             }
-//             ActualType::ATFunc(c, ts2)
-//         }
-//     }
-// }
 
 pub struct TypePool(pub Vec<Type>);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -335,4 +250,74 @@ pub enum CTStackVal {
     CTRegion(Region),
     CTCapability(CapabilityRef),
     CTType(TypeRef),
+}
+
+pub fn get_kind_str(ctval: CTStackVal) -> String {
+    match ctval {
+        CTStackVal::CTCapability(_) => "capability".to_owned(),
+        CTStackVal::CTRegion(_) => "region".to_owned(),
+        CTStackVal::CTType(_) => "type".to_owned(),
+    }
+}
+
+pub fn get_op_str(byte: u8) -> String {
+    (match byte {
+        0x00 => "req",
+        0x01 => "region",
+        0x02 => "heap",
+        0x03 => "cap",
+        0x04 => "cap_le",
+        0x05 => "own",
+        0x06 => "read",
+        0x07 => "both",
+        0x08 => "handle",
+        0x09 => "i32",
+        0x0A => "END_FUNC",
+        0x0B => "mut",
+        0x0C => "tuple",
+        0x0D => "arr",
+        0x0E => "all",
+        0x0F => "some",
+        0x10 => "emos",
+        0x11 => "func",
+        0x12 => "ct_get",
+        0x13 => "ct_pop",
+        0x14 => "unpack",
+        0x15 => "get",
+        0x16 => "init",
+        0x17 => "malloc",
+        0x18 => "proj",
+        0x19 => "clean",
+        0x20 => "call",
+        _ => panic!("unknown opcode {}", byte),
+    })
+    .to_owned()
+}
+
+pub fn pretty_kind(k: Kind) -> String {
+    (match k {
+        Kind::KCapability(_) => "capability",
+        Kind::KRegion => "region",
+        Kind::KType => "type",
+    })
+    .to_owned()
+}
+
+#[derive(Debug)]
+pub enum Error {
+    SyntaxErrorParamNeeded(u8),
+    SyntaxErrorUnknownOp(u8),
+    TypeErrorEmptyCTStack(OpCode1),
+    KindErrorReq(CTStackVal),
+    KindError(OpCode1, Kind, CTStackVal),
+    TypeErrorEmptyExistStack(OpCode1),
+    TypeErrorParamOutOfRange(OpCode1),
+    TypeErrorExistentialExpected(TypeRef),
+    TypeErrorEmptyStack(OpCode1),
+    CapabilityError(OpCode1, CapabilityRef),
+    TypeErrorInit(TypeRef, TypeRef),
+    TypeErrorTupleExpected(OpCode1, TypeRef),
+    TypeErrorRegionHandleExpected(OpCode1, TypeRef),
+    TypeErrorFunctionExpected(OpCode1, TypeRef),
+    TypeErrorNonEmptyExistStack()
 }
