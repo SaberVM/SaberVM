@@ -19,14 +19,13 @@ use crate::header::Type::*;
 use crate::header::TypeListPool;
 use crate::header::TypePool;
 use crate::header::TypeRef;
-use crate::header::pretty_t;
 use crate::header::Kind::*;
 
 pub fn first_pass<'a>(
     stmt: &Stmt1,
-    mut cap_pool: CapabilityPool,
-    mut type_pool: TypePool,
-    mut tl_pool: TypeListPool,
+    cap_pool: &mut CapabilityPool,
+    type_pool: &mut TypePool,
+    tl_pool: &mut TypeListPool,
 ) -> Result<Stmt2, i32> {
     let mut ct_stack: Vec<CTStackVal> = vec![];
     let Func1(label, ops) = stmt;
@@ -342,11 +341,6 @@ pub fn first_pass<'a>(
     if exist_stack.len() > 0 {
         return Err(16);
     }
-    // dbg!(&capabilities);
-    // dbg!(&regions);
-    // dbg!(&tvars);
-    // let t: Vec<&Type> = stack_type.iter().rev().map(|x| type_pool.get(*x)).collect();
-    // dbg!(t);
     let t = tvars.iter().fold(TFunc(cap_pool.add(capabilities), tl_pool.add(arg_types)), |t, id| TForall(*id, KType, type_pool.add(t)));
     let t = cvars.iter().fold(t, |t, c| 
             match c {
@@ -355,7 +349,6 @@ pub fn first_pass<'a>(
                 _ => panic!("nonvar in cvars")
             });
     let t = rvars.iter().fold(t, |t, r| TForall(*r, KRegion, type_pool.add(t)));
-    dbg!(pretty_t(&t, &type_pool, &tl_pool, &cap_pool));
     Ok(Func2(*label, t, out))
 }
 
