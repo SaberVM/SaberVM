@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::VecDeque;
 
 use crate::header::CTStackVal;
@@ -6,6 +7,7 @@ use crate::header::Capability;
 use crate::header::Capability::*;
 use crate::header::CapabilityPool;
 use crate::header::Id;
+use crate::header::Kind::*;
 use crate::header::OpCode1::*;
 use crate::header::OpCode2;
 use crate::header::OpCode2::*;
@@ -15,23 +17,54 @@ use crate::header::Stmt1;
 use crate::header::Stmt1::*;
 use crate::header::Stmt2;
 use crate::header::Stmt2::*;
+use crate::header::Type;
 use crate::header::Type::*;
 use crate::header::TypeListPool;
 use crate::header::TypePool;
 use crate::header::TypeRef;
-use crate::header::Kind::*;
 
-pub fn first_pass<'a>(
+pub fn go(
+    stmts: Vec<Stmt1>,
+    cap_pool: &mut CapabilityPool,
+    type_pool: &mut TypePool,
+    tl_pool: &mut TypeListPool,
+) -> Result<Vec<Stmt2>, i32> {
+    let mut out: Vec<Stmt2> = vec![];
+    let stmts2: Vec<(Stmt2, Constraints)> = stmts
+        .iter()
+        .map(|stmt| pass(stmt, cap_pool, type_pool, tl_pool))
+        .collect::<Result<Vec<_>,i32>>()
+        .unwrap();
+    let mut types: HashMap<i32, Type> = HashMap::new();
+    for pair in &stmts2 {
+        let (Func2(label, t, _), _) = pair;
+        types.insert(*label, *t);
+    }
+    let mut constraints: Constraints = HashMap::new();
+    for pair in stmts2 {
+        // TODO: check that the expected types of global functions are their actual types
+        let (stmt, c) = pair;
+        constraints.extend(c);
+        out.push(stmt);
+    }
+    return Ok(out);
+}
+
+type StackType = VecDeque<TypeRef>;
+type CTStackType = Vec<CTStackVal>;
+type Constraints = HashMap<i32,(StackType,CTStackType)>;
+
+fn pass(
     stmt: &Stmt1,
     cap_pool: &mut CapabilityPool,
     type_pool: &mut TypePool,
     tl_pool: &mut TypeListPool,
-) -> Result<Stmt2, i32> {
-    let mut ct_stack: Vec<CTStackVal> = vec![];
+) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>), i32> {
+    let mut ct_stack: CTStackType = vec![];
     let Func1(label, ops) = stmt;
     let mut iter = ops.iter();
     let mut arg_types: Vec<TypeRef> = vec![];
-    let mut stack_type: VecDeque<TypeRef> = VecDeque::from([]);
+    let mut stack_type: StackType = VecDeque::from([]);
     let mut rvars: Vec<Id> = vec![];
     let mut capabilities: Vec<Capability> = vec![];
     let mut cvars: Vec<Capability> = vec![];
@@ -39,6 +72,7 @@ pub fn first_pass<'a>(
     let mut exist_stack: Vec<Id> = vec![];
     let mut out: Vec<OpCode2> = vec![];
     let mut fresh_id = 0;
+    let mut constraints = HashMap::new();
     loop {
         match iter.next() {
             None => break,
@@ -178,7 +212,7 @@ pub fn first_pass<'a>(
                             let mb_t = ct_stack.pop();
                             match mb_t {
                                 Some(CTType(t)) => {
-                                    ct_stack.push(CTType(type_pool.add(TExists(id ,t))))
+                                    ct_stack.push(CTType(type_pool.add(TExists(id, t))))
                                 }
                                 _ => return Err(12),
                             }
@@ -209,7 +243,7 @@ pub fn first_pass<'a>(
                     let l = ct_stack.len();
                     let i = usize::from(*n);
                     if l == 0 || l - 1 < i {
-                        return Err(33)
+                        return Err(33);
                     }
                     let mb_x = ct_stack.get(l - i - 1);
                     match mb_x {
@@ -236,7 +270,7 @@ pub fn first_pass<'a>(
                     let l = stack_type.len();
                     let i = usize::from(*n);
                     if l == 0 || l - 1 < i {
-                        return Err(34)
+                        return Err(34);
                     }
                     match stack_type.get(l - 1 - i) {
                         Some(t) => stack_type.push_back(*t),
@@ -289,7 +323,7 @@ pub fn first_pass<'a>(
                                     dbg!(r, &capabilities);
                                     return Err(36);
                                 }
-                            },
+                            }
                             _ => {
                                 println!("Type error! malloc expects a region handle!");
                                 return Err(25);
@@ -334,28 +368,49 @@ pub fn first_pass<'a>(
                     out.push(Op2Clean(*n, count))
                     // NOTE: this doesn't pop enough if the stack type is too large. Doing it successive times will work though.
                 }
-                Op1Call() => out.push(Op2Call()),
+                Op1Call() => {
+                    let mb_t = stack_type.pop_back();
+                    match mb_t {
+                        Some(tr) => {
+                            let t = type_pool.get(tr);
+                            match t {
+                                TGuess(l) => {
+                                    constraints.insert(*l, (stack_type.clone(), ct_stack.clone()));
+                                }
+                                TForall(id,k,tr) => todo!(),
+                                TFunc(cr,tsr) => todo!(),
+                                _ => return Err(39)
+                            }
+                        }
+                        None => return Err(38)
+                    }
+                    out.push(Op2Call())
+                }
             },
         }
     }
     if exist_stack.len() > 0 {
         return Err(16);
     }
-    let t = tvars.iter().fold(TFunc(cap_pool.add(capabilities), tl_pool.add(arg_types)), |t, id| TForall(*id, KType, type_pool.add(t)));
-    let t = cvars.iter().fold(t, |t, c| 
-            match c {
-                CapVar(id) => TForall(*id, KCapability(None), type_pool.add(t)),
-                CapVarBounded(id, bound) => TForall(*id, KCapability(Some(*bound)), type_pool.add(t)),
-                _ => panic!("nonvar in cvars")
-            });
-    let t = rvars.iter().fold(t, |t, r| TForall(*r, KRegion, type_pool.add(t)));
-    Ok(Func2(*label, t, out))
+    let t = tvars.iter().fold(
+        TFunc(cap_pool.add(capabilities), tl_pool.add(arg_types)),
+        |t, id| TForall(*id, KType, type_pool.add(t)),
+    );
+    let t = cvars.iter().fold(t, |t, c| match c {
+        CapVar(id) => TForall(*id, KCapability(None), type_pool.add(t)),
+        CapVarBounded(id, bound) => TForall(*id, KCapability(Some(*bound)), type_pool.add(t)),
+        _ => panic!("nonvar in cvars"),
+    });
+    let t = rvars
+        .iter()
+        .fold(t, |t, r| TForall(*r, KRegion, type_pool.add(t)));
+    Ok((Func2(*label, t, out), constraints))
 }
 
 pub fn capable(r: &Region, c: &Capability, cap_pool: &CapabilityPool) -> bool {
     match c {
         Owned(r2) | NotOwned(r2) if *r == *r2 => true,
         CapVarBounded(_, cr) => cap_pool.get(*cr).iter().any(|c| capable(r, c, cap_pool)),
-        _ => false
+        _ => false,
     }
 }

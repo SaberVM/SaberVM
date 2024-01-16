@@ -1,33 +1,32 @@
-
 #[derive(Clone, Copy, Debug)]
 pub enum OpCode1 {
-    Op1Req(),       // 0x00
-    Op1Region(),    // 0x01
-    Op1Heap(),      // 0x02
-    Op1Cap(),       // 0x03
-    Op1CapLE(),     // 0x04
-    Op1Own(),       // 0x05
-    Op1Read(),      // 0x06
-    Op1Both(),      // 0x07
-    Op1Handle(),    // 0x08
-    Op1i32(),       // 0x09
-    Op1End(),       // 0x0A
-    Op1Mut(),       // 0x0B
-    Op1Tuple(u8),   // 0x0C
-    Op1Arr(),       // 0x0D
-    Op1All(),       // 0x0E
-    Op1Some(),      // 0x0F
-    Op1Emos(),      // 0x10
-    Op1Func(u8),    // 0x11
-    Op1CTGet(u8),   // 0x12
-    Op1CTPop(),     // 0x13
-    Op1Unpack(),    // 0x14
-    Op1Get(u8),     // 0x15
-    Op1Init(u8),    // 0x16
-    Op1Malloc(),    // 0x17
-    Op1Proj(u8),    // 0x18
-    Op1Clean(u8),   // 0x19
-    Op1Call(),      // 0x1A
+    Op1Req(),     // 0x00
+    Op1Region(),  // 0x01
+    Op1Heap(),    // 0x02
+    Op1Cap(),     // 0x03
+    Op1CapLE(),   // 0x04
+    Op1Own(),     // 0x05
+    Op1Read(),    // 0x06
+    Op1Both(),    // 0x07
+    Op1Handle(),  // 0x08
+    Op1i32(),     // 0x09
+    Op1End(),     // 0x0A
+    Op1Mut(),     // 0x0B
+    Op1Tuple(u8), // 0x0C
+    Op1Arr(),     // 0x0D
+    Op1All(),     // 0x0E
+    Op1Some(),    // 0x0F
+    Op1Emos(),    // 0x10
+    Op1Func(u8),  // 0x11
+    Op1CTGet(u8), // 0x12
+    Op1CTPop(),   // 0x13
+    Op1Unpack(),  // 0x14
+    Op1Get(u8),   // 0x15
+    Op1Init(u8),  // 0x16
+    Op1Malloc(),  // 0x17
+    Op1Proj(u8),  // 0x18
+    Op1Clean(u8), // 0x19
+    Op1Call(),    // 0x1A
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -47,7 +46,7 @@ pub fn pretty_op2(op: &OpCode2) -> String {
         OpCode2::Op2Malloc(_n) => "malloc".to_owned(),
         OpCode2::Op2Proj(n) => "proj ".to_owned() + &n.to_string(),
         OpCode2::Op2Clean(n, _m) => "clean ".to_owned() + &n.to_string(),
-        OpCode2::Op2Call() => "call".to_owned()
+        OpCode2::Op2Call() => "call".to_owned(),
     }
 }
 
@@ -113,17 +112,24 @@ pub enum Type {
     TForall(Id, Kind, TypeRef),
     TExists(Id, TypeRef),
     TFunc(CapabilityRef, TypeListRef),
+    TGuess(i32)
 }
 
 pub fn pretty_region(r: Region) -> String {
     match r {
         Region::Heap() => "Heap".to_string(),
-        Region::RegionVar(id) => "r".to_owned() + &id.1.to_string()
+        Region::RegionVar(id) => "r".to_owned() + &id.1.to_string(),
     }
 }
 
 pub fn pretty_caps(cs: &Vec<Capability>) -> String {
-    "{".to_owned() + &cs.iter().map(|c| pretty_cap(*c)).collect::<Vec<_>>().join(",") + "}"
+    "{".to_owned()
+        + &cs
+            .iter()
+            .map(|c| pretty_cap(*c))
+            .collect::<Vec<_>>()
+            .join(",")
+        + "}"
 }
 
 pub fn pretty_cap(c: Capability) -> String {
@@ -131,12 +137,22 @@ pub fn pretty_cap(c: Capability) -> String {
         Capability::CapVar(id) => "c".to_owned() + &id.1.to_string(),
         Capability::CapVarBounded(id, _cr) => "c".to_owned() + &id.1.to_string(),
         Capability::Owned(r) => "1".to_owned() + &pretty_region(r),
-        Capability::NotOwned(r) => "+".to_owned() + &pretty_region(r)
+        Capability::NotOwned(r) => "+".to_owned() + &pretty_region(r),
     }
 }
 
-pub fn pretty_ts(ts: &TypeListRef, type_pool: &TypePool, tl_pool: &TypeListPool, cap_pool: &CapabilityPool) -> String {
-    tl_pool.get(*ts).iter().map(|tr| pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool)).collect::<Vec<_>>().join(", ")
+pub fn pretty_ts(
+    ts: &TypeListRef,
+    type_pool: &TypePool,
+    tl_pool: &TypeListPool,
+    cap_pool: &CapabilityPool,
+) -> String {
+    tl_pool
+        .get(*ts)
+        .iter()
+        .map(|tr| pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn var(id: &Id, k: Kind, cap_pool: &CapabilityPool) -> String {
@@ -144,21 +160,54 @@ fn var(id: &Id, k: Kind, cap_pool: &CapabilityPool) -> String {
         Kind::KRegion => "r".to_owned() + &id.1.to_string(),
         Kind::KType => "t".to_owned() + &id.1.to_string(),
         Kind::KCapability(None) => "c".to_owned() + &id.1.to_string(),
-        Kind::KCapability(Some(c)) => "c".to_owned() + &id.1.to_string() + "≤" + &pretty_caps(cap_pool.get(c))
+        Kind::KCapability(Some(c)) => {
+            "c".to_owned() + &id.1.to_string() + "≤" + &pretty_caps(cap_pool.get(c))
+        }
     }
 }
 
-pub fn pretty_t(t: &Type, type_pool: &TypePool, tl_pool: &TypeListPool, cap_pool: &CapabilityPool) -> String {
+pub fn pretty_t(
+    t: &Type,
+    type_pool: &TypePool,
+    tl_pool: &TypeListPool,
+    cap_pool: &CapabilityPool,
+) -> String {
     match t {
         Type::Ti32() => "i32".to_string(),
         Type::THandle(r) => "handle(".to_owned() + &pretty_region(*r) + ")",
-        Type::TMutable(tr) => "mut ".to_owned() + &pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool),
-        Type::TTuple(ts, r) => "(".to_owned() + &pretty_ts(ts, type_pool, tl_pool, cap_pool) + ")@" + &pretty_region(*r),
-        Type::TArray(tr) => "[]".to_owned() + &pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool),
+        Type::TMutable(tr) => {
+            "mut ".to_owned() + &pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool)
+        }
+        Type::TTuple(ts, r) => {
+            "(".to_owned()
+                + &pretty_ts(ts, type_pool, tl_pool, cap_pool)
+                + ")@"
+                + &pretty_region(*r)
+        }
+        Type::TArray(tr) => {
+            "[]".to_owned() + &pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool)
+        }
         Type::TVar(id) => "t".to_owned() + &id.1.to_string(),
-        Type::TForall(id, k, tr) => "Forall ".to_owned() + &var(&id, *k, cap_pool) + ". " + &pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool),
-        Type::TExists(id, tr) => "Exists t".to_owned() + &id.1.to_string() + ". " + &pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool),
-        Type::TFunc(c, ts) => "[".to_owned() + &pretty_caps(cap_pool.get(*c)) + "](" + &pretty_ts(ts, type_pool, tl_pool, cap_pool) + ")->0"
+        Type::TForall(id, k, tr) => {
+            "Forall ".to_owned()
+                + &var(&id, *k, cap_pool)
+                + ". "
+                + &pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool)
+        }
+        Type::TExists(id, tr) => {
+            "Exists t".to_owned()
+                + &id.1.to_string()
+                + ". "
+                + &pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool)
+        }
+        Type::TFunc(c, ts) => {
+            "[".to_owned()
+                + &pretty_caps(cap_pool.get(*c))
+                + "]("
+                + &pretty_ts(ts, type_pool, tl_pool, cap_pool)
+                + ")->0"
+        },
+        Type::TGuess(_) => panic!("type-checking artifact lasted too long")
     }
 }
 

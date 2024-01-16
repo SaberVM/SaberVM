@@ -4,12 +4,12 @@ mod verify;
 
 use std::fs;
 
-use crate::header::CapabilityPool;
-use crate::header::TypeListPool;
-use crate::header::TypePool;
-use crate::header::Stmt2::*;
 use crate::header::pretty_op2;
 use crate::header::pretty_t;
+use crate::header::CapabilityPool;
+use crate::header::Stmt2::*;
+use crate::header::TypeListPool;
+use crate::header::TypePool;
 
 fn main() {
     let code = fs::read("bin.svm").unwrap();
@@ -22,10 +22,11 @@ fn main() {
             let mut cap_pool = CapabilityPool(vec![]);
             let mut type_pool = TypePool(vec![]);
             let mut tl_pool = TypeListPool(vec![]);
-        
-            let prog2 = verify::first_pass(&prog[0], &mut cap_pool, &mut type_pool, &mut tl_pool);
+
+            let prog2 = verify::go(prog, &mut cap_pool, &mut type_pool, &mut tl_pool);
             match prog2 {
-                Ok(p) => {
+                Ok(stmts) => {
+                    let p = &stmts[0];
                     let Func2(_, t, ops) = p;
                     dbg!(pretty_t(&t, &type_pool, &tl_pool, &cap_pool));
                     for op in ops {
@@ -41,12 +42,12 @@ fn main() {
     }
 }
 
-// I keep this here for documentation: 
+// I keep this here for documentation:
 // let code: Vec<u8> = vec![
 //     0x00,   // _op_        _run-time_stack_    _compile-time_stack_
-//     0x00, 
-//     0x00, 
-//     0x00, 
+//     0x00,
+//     0x00,
+//     0x00,
 //     0x01,   // region                           r
 //     0x12,   // ct_get 0                         r,r
 //     0x00,
