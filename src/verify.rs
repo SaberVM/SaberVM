@@ -349,7 +349,10 @@ fn pass(
                                 None => return Err(TypeErrorParamOutOfRange(*op)),
                                 Some(t) => {
                                     if capabilities.iter().all(|c| !capable(r, c, &cap_pool)) {
-                                        return Err(CapabilityError(*op, cap_pool.add(capabilities)));
+                                        return Err(CapabilityError(
+                                            *op,
+                                            cap_pool.add(capabilities),
+                                        ));
                                     }
                                     stack_type.push_back(*t);
                                 }

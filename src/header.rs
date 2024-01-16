@@ -39,17 +39,6 @@ pub enum OpCode2 {
     Op2Call(),
 }
 
-pub fn pretty_op2(op: &OpCode2) -> String {
-    match op {
-        OpCode2::Op2Get(n) => "get ".to_owned() + &n.to_string(),
-        OpCode2::Op2Init(n) => "init ".to_owned() + &n.to_string(),
-        OpCode2::Op2Malloc(_n) => "malloc".to_owned(),
-        OpCode2::Op2Proj(n) => "proj ".to_owned() + &n.to_string(),
-        OpCode2::Op2Clean(n, _m) => "clean ".to_owned() + &n.to_string(),
-        OpCode2::Op2Call() => "call".to_owned(),
-    }
-}
-
 #[derive(Debug)]
 pub enum Stmt1 {
     Func1(i32, Vec<OpCode1>),
@@ -113,102 +102,6 @@ pub enum Type {
     TExists(Id, TypeRef),
     TFunc(CapabilityRef, TypeListRef),
     TGuess(i32),
-}
-
-pub fn pretty_region(r: Region) -> String {
-    match r {
-        Region::Heap() => "Heap".to_string(),
-        Region::RegionVar(id) => "r".to_owned() + &id.1.to_string(),
-    }
-}
-
-pub fn pretty_caps(cs: &Vec<Capability>) -> String {
-    "{".to_owned()
-        + &cs
-            .iter()
-            .map(|c| pretty_cap(*c))
-            .collect::<Vec<_>>()
-            .join(",")
-        + "}"
-}
-
-pub fn pretty_cap(c: Capability) -> String {
-    match c {
-        Capability::CapVar(id) => "c".to_owned() + &id.1.to_string(),
-        Capability::CapVarBounded(id, _cr) => "c".to_owned() + &id.1.to_string(),
-        Capability::Owned(r) => "1".to_owned() + &pretty_region(r),
-        Capability::NotOwned(r) => "+".to_owned() + &pretty_region(r),
-    }
-}
-
-pub fn pretty_ts(
-    ts: &TypeListRef,
-    type_pool: &TypePool,
-    tl_pool: &TypeListPool,
-    cap_pool: &CapabilityPool,
-) -> String {
-    tl_pool
-        .get(*ts)
-        .iter()
-        .map(|tr| pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-fn var(id: &Id, k: Kind, cap_pool: &CapabilityPool) -> String {
-    match k {
-        Kind::KRegion => "r".to_owned() + &id.1.to_string(),
-        Kind::KType => "t".to_owned() + &id.1.to_string(),
-        Kind::KCapability(None) => "c".to_owned() + &id.1.to_string(),
-        Kind::KCapability(Some(c)) => {
-            "c".to_owned() + &id.1.to_string() + "≤" + &pretty_caps(cap_pool.get(c))
-        }
-    }
-}
-
-pub fn pretty_t(
-    t: &Type,
-    type_pool: &TypePool,
-    tl_pool: &TypeListPool,
-    cap_pool: &CapabilityPool,
-) -> String {
-    match t {
-        Type::Ti32() => "i32".to_string(),
-        Type::THandle(r) => "handle(".to_owned() + &pretty_region(*r) + ")",
-        Type::TMutable(tr) => {
-            "mut ".to_owned() + &pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool)
-        }
-        Type::TTuple(ts, r) => {
-            "(".to_owned()
-                + &pretty_ts(ts, type_pool, tl_pool, cap_pool)
-                + ")@"
-                + &pretty_region(*r)
-        }
-        Type::TArray(tr) => {
-            "[]".to_owned() + &pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool)
-        }
-        Type::TVar(id) => "t".to_owned() + &id.1.to_string(),
-        Type::TForall(id, k, tr) => {
-            "Forall ".to_owned()
-                + &var(&id, *k, cap_pool)
-                + ". "
-                + &pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool)
-        }
-        Type::TExists(id, tr) => {
-            "Exists t".to_owned()
-                + &id.1.to_string()
-                + ". "
-                + &pretty_t(type_pool.get(*tr), type_pool, tl_pool, cap_pool)
-        }
-        Type::TFunc(c, ts) => {
-            "[".to_owned()
-                + &pretty_caps(cap_pool.get(*c))
-                + "]("
-                + &pretty_ts(ts, type_pool, tl_pool, cap_pool)
-                + ")->0"
-        }
-        Type::TGuess(_) => panic!("type-checking artifact lasted too long"),
-    }
 }
 
 pub struct TypePool(pub Vec<Type>);
@@ -319,5 +212,5 @@ pub enum Error {
     TypeErrorTupleExpected(OpCode1, TypeRef),
     TypeErrorRegionHandleExpected(OpCode1, TypeRef),
     TypeErrorFunctionExpected(OpCode1, TypeRef),
-    TypeErrorNonEmptyExistStack()
+    TypeErrorNonEmptyExistStack(),
 }

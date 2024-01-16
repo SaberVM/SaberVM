@@ -1,12 +1,11 @@
 mod error_handling;
 mod header;
 mod parse;
+mod pretty;
 mod verify;
 
 use std::fs;
 
-use crate::header::pretty_op2;
-use crate::header::pretty_t;
 use crate::header::CapabilityPool;
 use crate::header::Error;
 use crate::header::Stmt2::*;
@@ -24,9 +23,9 @@ fn go(
     let stmts = verify::go(prog, &mut cap_pool, &mut type_pool, &mut tl_pool)?;
     let p = &stmts[0];
     let Func2(_, t, ops) = p;
-    dbg!(pretty_t(&t, &type_pool, &tl_pool, &cap_pool));
+    dbg!(pretty::typ(&t, &type_pool, &tl_pool, &cap_pool));
     for op in ops {
-        println!("{}", pretty_op2(&op))
+        println!("{}", pretty::op2(&op))
     }
     Ok(())
 }
