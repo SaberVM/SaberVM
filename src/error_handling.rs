@@ -49,7 +49,7 @@ pub fn handle(
             TypeErrorExistentialExpected(found) => {
                 println!(
                     "Type error! Expected an existential type, but found {}",
-                    pretty::typ(type_pool.get(found), &type_pool, &tl_pool, &cap_pool)
+                    pretty::typ(type_pool.get(&found), &type_pool, &tl_pool, &cap_pool)
                 )
             }
             TypeErrorEmptyStack(op) => {
@@ -62,28 +62,28 @@ pub fn handle(
                 println!(
                     "Capability error! {:#?} doesn't have enough permission, only {}!",
                     op,
-                    pretty::caps(cap_pool.get(cr))
+                    pretty::caps(cap_pool.get(&cr))
                 )
             }
             TypeErrorInit(expected, found) => {
                 println!(
                     "Type error! init is setting a field of the wrong type! Expected {}, found {}",
-                    pretty::typ(type_pool.get(expected), &type_pool, &tl_pool, &cap_pool),
-                    pretty::typ(type_pool.get(found), &type_pool, &tl_pool, &cap_pool)
+                    pretty::typ(type_pool.get(&expected), &type_pool, &tl_pool, &cap_pool),
+                    pretty::typ(type_pool.get(&found), &type_pool, &tl_pool, &cap_pool)
                 )
             }
             TypeErrorTupleExpected(op, tr) => {
                 println!(
                     "Type error! {:#?} expected a tuple type, but found a {} instead!",
                     op,
-                    pretty::typ(type_pool.get(tr), &type_pool, &tl_pool, &cap_pool)
+                    pretty::typ(type_pool.get(&tr), &type_pool, &tl_pool, &cap_pool)
                 )
             }
             TypeErrorRegionHandleExpected(op, tr) => {
                 println!(
                     "Type error! {:#?} expected a region handle, but found a {} instead!",
                     op,
-                    pretty::typ(type_pool.get(tr), &type_pool, &tl_pool, &cap_pool)
+                    pretty::typ(type_pool.get(&tr), &type_pool, &tl_pool, &cap_pool)
                 )
             }
             // TypeErrorFunctionExpected(op, tr) => {

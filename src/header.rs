@@ -34,7 +34,6 @@ pub enum OpCode2 {
     Op2Init(u8),
     Op2Malloc(u8),
     Op2Proj(u8),
-    Op2Clean(u8, u8),
     Op2Call(),
 }
 
@@ -76,10 +75,10 @@ pub struct CapabilityPool(pub Vec<Vec<Capability>>);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CapabilityRef(u32);
 impl CapabilityPool {
-    pub fn get(&self, r: CapabilityRef) -> &Vec<Capability> {
+    pub fn get(&self, r: &CapabilityRef) -> &Vec<Capability> {
         let CapabilityPool(v) = self;
         let CapabilityRef(i) = r;
-        &v[i as usize]
+        &v[*i as usize]
     }
     pub fn add(&mut self, cap: Vec<Capability>) -> CapabilityRef {
         let CapabilityPool(v) = self;
@@ -100,17 +99,17 @@ pub enum Type {
     TForall(Id, Kind, TypeRef),
     TExists(Id, TypeRef),
     TFunc(CapabilityRef, TypeListRef),
-    // TGuess(i32),
+    TGuess(i32),
 }
 
 pub struct TypePool(pub Vec<Type>);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TypeRef(u32);
 impl TypePool {
-    pub fn get(&self, r: TypeRef) -> &Type {
+    pub fn get(&self, r: &TypeRef) -> &Type {
         let TypePool(v) = self;
         let TypeRef(i) = r;
-        &v[i as usize]
+        &v[*i as usize]
     }
     pub fn add(&mut self, t: Type) -> TypeRef {
         let TypePool(v) = self;
@@ -124,10 +123,10 @@ pub struct TypeListPool(pub Vec<Vec<TypeRef>>);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TypeListRef(u32);
 impl TypeListPool {
-    pub fn get(&self, r: TypeListRef) -> &Vec<TypeRef> {
+    pub fn get(&self, r: &TypeListRef) -> &Vec<TypeRef> {
         let TypeListPool(v) = self;
         let TypeListRef(i) = r;
-        &v[i as usize]
+        &v[*i as usize]
     }
     pub fn add(&mut self, ts: Vec<TypeRef>) -> TypeListRef {
         let TypeListPool(v) = self;
