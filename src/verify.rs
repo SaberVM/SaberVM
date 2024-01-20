@@ -6,9 +6,11 @@ use crate::header::CTStackVal::*;
 use crate::header::Capability;
 use crate::header::Capability::*;
 use crate::header::CapabilityPool;
+use crate::header::CapabilityRef;
 use crate::header::Error;
 use crate::header::Error::*;
 use crate::header::Id;
+use crate::header::Kind;
 use crate::header::Kind::*;
 use crate::header::OpCode1::*;
 use crate::header::OpCode2;
@@ -22,8 +24,10 @@ use crate::header::Stmt2::*;
 use crate::header::Type;
 use crate::header::Type::*;
 use crate::header::TypeListPool;
+use crate::header::TypeListRef;
 use crate::header::TypePool;
 use crate::header::TypeRef;
+use crate::header::get_kind;
 
 pub fn go(
     stmts: Vec<Stmt1>,
@@ -363,31 +367,45 @@ fn pass(
                     }
                     out.push(Op2Proj(*n))
                 }
-                Op1Clean(n) => {
-                    let idx = i32::from(*n);
-                    let diff = (stack_type.len() as i32) - 1 - idx;
-                    if diff < 0 {
-                        return Err(TypeErrorParamOutOfRange(*op));
-                    }
-                    let count = (if diff > 0xFF { 0xFF } else { diff }) as u8; // definitely won't lose information, since its in (0, 255)
-                    for _ in 0..count {
-                        stack_type.pop_front();
-                    }
-                    out.push(Op2Clean(*n, count))
-                    // NOTE: this doesn't pop enough if the stack type is too large. Doing it successive times will work though.
-                }
                 Op1Call() => {
                     let mb_t = stack_type.pop_back();
                     match mb_t {
                         Some(tr) => {
                             let t = type_pool.get(tr);
                             match t {
-                                TGuess(l) => {
-                                    constraints.insert(*l, (stack_type.clone(), ct_stack.clone()));
+                                // TGuess(l) => {
+                                //     constraints.insert(*l, (stack_type.clone(), ct_stack.clone()));
+                                // }
+                                _ => {
+                                    let (vars, _caps_ref, _args_ref) = get_func_type_info(t, &type_pool);
+                                    let mut assignments = HashMap::new();
+                                    for (id, k) in vars {
+                                        let mb_ctval = ct_stack.pop();
+                                        match mb_ctval {
+                                            Some(CTCapability(cr)) => {
+                                                match k {
+                                                    KCapability(Some(bound)) => {
+                                                        if within_bound(&cr, bound, &cap_pool) {
+                                                            assignments.insert(id, CTCapability(cr));
+                                                        } else {
+                                                            return Err(ErrorTodo);
+                                                        }
+                                                    }
+                                                    KCapability(None) => {
+                                                        assignments.insert(id, CTCapability(cr));
+                                                    }
+                                                    _ => return Err(ErrorTodo)
+                                                }
+                                            }
+                                            Some(ctval) => {
+                                                if get_kind(&ctval) == *k {
+                                                    assignments.insert(id, ctval);
+                                                }
+                                            }
+                                            None => return Err(ErrorTodo)
+                                        }
+                                    }
                                 }
-                                TForall(id, k, tr) => todo!(),
-                                TFunc(cr, tsr) => todo!(),
-                                _ => return Err(TypeErrorFunctionExpected(*op, tr)),
                             }
                         }
                         None => return Err(TypeErrorEmptyStack(*op)),
@@ -415,10 +433,32 @@ fn pass(
     Ok((Func2(*label, t, out), constraints))
 }
 
-pub fn capable(r: &Region, c: &Capability, cap_pool: &CapabilityPool) -> bool {
+fn capable(r: &Region, c: &Capability, cap_pool: &CapabilityPool) -> bool {
     match c {
         Owned(r2) | NotOwned(r2) if *r == *r2 => true,
         CapVarBounded(_, cr) => cap_pool.get(*cr).iter().any(|c| capable(r, c, cap_pool)),
         _ => false,
     }
+}
+
+fn get_func_type_info<'a>(func_t: &'a Type, type_pool: &'a TypePool) -> (Vec<(&'a Id, &'a Kind)>, CapabilityRef, TypeListRef) {
+    let mut ids: Vec<(&Id, &Kind)> = vec![];
+    let mut t = func_t;
+    loop {
+        match t {
+            TForall(id, k, tr) => {
+                ids.push((id, k));
+                t = type_pool.get(*tr);
+            }
+            TFunc(cr, tsr) => return (ids, *cr, *tsr),
+            _ => panic!("get_func_type_info on non-function type")
+        }
+    }
+}
+
+fn within_bound(cr: &CapabilityRef, boundr: &CapabilityRef, cap_pool: &CapabilityPool) -> bool {
+    // let cs = cap_pool.get(*cr);
+    // let bound = cap_pool.get(*boundr);
+    (cr, boundr, cap_pool);
+    true // TODO
 }

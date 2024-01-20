@@ -59,11 +59,7 @@ fn lex(istream: &Vec<u8>) -> Result<Vec<OpCode1>, Error> {
                     None => return Err(SyntaxErrorParamNeeded(*byte)),
                     Some(n) => Op1Proj(*n),
                 },
-                0x19 => match i.next() {
-                    None => return Err(SyntaxErrorParamNeeded(*byte)),
-                    Some(n) => Op1Clean(*n),
-                },
-                0x1A => Op1Call(),
+                0x19 => Op1Call(),
                 op => return Err(SyntaxErrorUnknownOp(*op)),
             }),
         }

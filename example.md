@@ -70,7 +70,5 @@ By way of basic documentation
 0x14,   // unpack       (f,c),c,(a,a),a,k,r a,{c≤+r},r
 0x18,   // proj 0       f,c,(a,a),a,k,r     a,{c≤+r},r
 0x00,
-0x19,   // clean 3      f,c,(a,a)           a,{c≤+r},r
-0x03,
-0x1A    // call         --                  --
+0x19    // call         --                  --
 ```

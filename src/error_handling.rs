@@ -1,6 +1,4 @@
-use crate::header::get_kind_str;
-use crate::header::get_op_str;
-use crate::header::pretty_kind;
+
 use crate::header::CapabilityPool;
 use crate::header::Error;
 use crate::header::Error::*;
@@ -19,7 +17,7 @@ pub fn handle(
             SyntaxErrorParamNeeded(op) => {
                 println!(
                     "Syntax error! The file ended while a parameter for {} was expected!",
-                    get_op_str(op)
+                    pretty::op_u8(op)
                 )
             }
             SyntaxErrorUnknownOp(op) => {
@@ -31,15 +29,15 @@ pub fn handle(
             KindErrorReq(val) => {
                 println!(
                     "Kind error! req needs a type or region, but it received a {}!",
-                    get_kind_str(val)
+                    pretty::get_kind_str(&val)
                 )
             }
             KindError(op, expected, found) => {
                 println!(
                     "Kind error! {:#?} needs a {}, but it received a {}!",
                     op,
-                    pretty_kind(expected),
-                    get_kind_str(found)
+                    pretty::kind(expected),
+                    pretty::get_kind_str(&found)
                 )
             }
             TypeErrorEmptyExistStack(op) => {
@@ -88,16 +86,17 @@ pub fn handle(
                     pretty::typ(type_pool.get(tr), &type_pool, &tl_pool, &cap_pool)
                 )
             }
-            TypeErrorFunctionExpected(op, tr) => {
-                println!(
-                    "Type error! {:#?} expected a function, but found a {} instead!",
-                    op,
-                    pretty::typ(type_pool.get(tr), &type_pool, &tl_pool, &cap_pool)
-                )
-            }
+            // TypeErrorFunctionExpected(op, tr) => {
+            //     println!(
+            //         "Type error! {:#?} expected a function, but found a {} instead!",
+            //         op,
+            //         pretty::typ(type_pool.get(tr), &type_pool, &tl_pool, &cap_pool)
+            //     )
+            // }
             TypeErrorNonEmptyExistStack() => {
                 println!("Type error! At the end of the function there are still unbound existential variables!")
             }
+            ErrorTodo => panic!()
         },
         Ok(()) => (),
     }

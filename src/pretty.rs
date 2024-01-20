@@ -1,3 +1,4 @@
+use crate::header::CTStackVal;
 use crate::header::Capability;
 use crate::header::Capability::*;
 use crate::header::CapabilityPool;
@@ -13,6 +14,7 @@ use crate::header::Type::*;
 use crate::header::TypeListPool;
 use crate::header::TypeListRef;
 use crate::header::TypePool;
+use crate::header::get_kind;
 
 pub fn op2(op: &OpCode2) -> String {
     match op {
@@ -102,6 +104,53 @@ pub fn typ(
                 + &types(ts, type_pool, tl_pool, cap_pool)
                 + ")->0"
         }
-        TGuess(_) => panic!("type-checking artifact lasted too long"),
+        // TGuess(_) => panic!("type-checking artifact lasted too long"),
     }
+}
+
+
+pub fn get_kind_str(ctval: &CTStackVal) -> String {
+    kind(get_kind(ctval))
+}
+
+pub fn op_u8(byte: u8) -> String {
+    (match byte {
+        0x00 => "req",
+        0x01 => "region",
+        0x02 => "heap",
+        0x03 => "cap",
+        0x04 => "cap_le",
+        0x05 => "own",
+        0x06 => "read",
+        0x07 => "both",
+        0x08 => "handle",
+        0x09 => "i32",
+        0x0A => "END_FUNC",
+        0x0B => "mut",
+        0x0C => "tuple",
+        0x0D => "arr",
+        0x0E => "all",
+        0x0F => "some",
+        0x10 => "emos",
+        0x11 => "func",
+        0x12 => "ct_get",
+        0x13 => "ct_pop",
+        0x14 => "unpack",
+        0x15 => "get",
+        0x16 => "init",
+        0x17 => "malloc",
+        0x18 => "proj",
+        0x19 => "call",
+        _ => panic!("unknown opcode {}", byte),
+    })
+    .to_owned()
+}
+
+pub fn kind(k: Kind) -> String {
+    (match k {
+        Kind::KCapability(_) => "capability",
+        Kind::KRegion => "region",
+        Kind::KType => "type",
+    })
+    .to_owned()
 }

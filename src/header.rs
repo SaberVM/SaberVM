@@ -25,8 +25,7 @@ pub enum OpCode1 {
     Op1Init(u8),  // 0x16
     Op1Malloc(),  // 0x17
     Op1Proj(u8),  // 0x18
-    Op1Clean(u8), // 0x19
-    Op1Call(),    // 0x1A
+    Op1Call(),    // 0x19
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -56,7 +55,7 @@ pub enum Kind {
     KCapability(Option<CapabilityRef>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Id(pub i32, pub i32);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,7 +100,7 @@ pub enum Type {
     TForall(Id, Kind, TypeRef),
     TExists(Id, TypeRef),
     TFunc(CapabilityRef, TypeListRef),
-    TGuess(i32),
+    // TGuess(i32),
 }
 
 pub struct TypePool(pub Vec<Type>);
@@ -145,55 +144,12 @@ pub enum CTStackVal {
     CTType(TypeRef),
 }
 
-pub fn get_kind_str(ctval: CTStackVal) -> String {
+pub fn get_kind(ctval: &CTStackVal) -> Kind {
     match ctval {
-        CTStackVal::CTCapability(_) => "capability".to_owned(),
-        CTStackVal::CTRegion(_) => "region".to_owned(),
-        CTStackVal::CTType(_) => "type".to_owned(),
+        CTStackVal::CTCapability(_) => Kind::KCapability(None),
+        CTStackVal::CTRegion(_) => Kind::KRegion,
+        CTStackVal::CTType(_) => Kind::KType
     }
-}
-
-pub fn get_op_str(byte: u8) -> String {
-    (match byte {
-        0x00 => "req",
-        0x01 => "region",
-        0x02 => "heap",
-        0x03 => "cap",
-        0x04 => "cap_le",
-        0x05 => "own",
-        0x06 => "read",
-        0x07 => "both",
-        0x08 => "handle",
-        0x09 => "i32",
-        0x0A => "END_FUNC",
-        0x0B => "mut",
-        0x0C => "tuple",
-        0x0D => "arr",
-        0x0E => "all",
-        0x0F => "some",
-        0x10 => "emos",
-        0x11 => "func",
-        0x12 => "ct_get",
-        0x13 => "ct_pop",
-        0x14 => "unpack",
-        0x15 => "get",
-        0x16 => "init",
-        0x17 => "malloc",
-        0x18 => "proj",
-        0x19 => "clean",
-        0x20 => "call",
-        _ => panic!("unknown opcode {}", byte),
-    })
-    .to_owned()
-}
-
-pub fn pretty_kind(k: Kind) -> String {
-    (match k {
-        Kind::KCapability(_) => "capability",
-        Kind::KRegion => "region",
-        Kind::KType => "type",
-    })
-    .to_owned()
 }
 
 #[derive(Debug)]
@@ -211,6 +167,7 @@ pub enum Error {
     TypeErrorInit(TypeRef, TypeRef),
     TypeErrorTupleExpected(OpCode1, TypeRef),
     TypeErrorRegionHandleExpected(OpCode1, TypeRef),
-    TypeErrorFunctionExpected(OpCode1, TypeRef),
+    // TypeErrorFunctionExpected(OpCode1, TypeRef),
     TypeErrorNonEmptyExistStack(),
+    ErrorTodo
 }
