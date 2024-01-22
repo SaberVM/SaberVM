@@ -1,19 +1,20 @@
 use crate::header::CTStackVal;
 use crate::header::Capability;
 use crate::header::Capability::*;
-use crate::header::CapabilityPool;
 use crate::header::Id;
 use crate::header::Kind;
 use crate::header::Kind::*;
+use crate::header::KindContext;
+use crate::header::KindContextEntry::*;
 use crate::header::OpCode2;
 use crate::header::OpCode2::*;
 use crate::header::Region;
 use crate::header::Region::*;
-use crate::header::Type;
 use crate::header::Type::*;
 use crate::header::TypeListPool;
 use crate::header::TypeListRef;
 use crate::header::TypePool;
+use crate::header::TypeRef;
 use crate::header::get_kind;
 
 pub fn op2(op: &OpCode2) -> String {
@@ -22,25 +23,41 @@ pub fn op2(op: &OpCode2) -> String {
         Op2Init(n) => "init ".to_owned() + &n.to_string(),
         Op2Malloc(_n) => "malloc".to_owned(),
         Op2Proj(n) => "proj ".to_owned() + &n.to_string(),
-        Op2Call() => "call".to_owned(),
+        Op2Call => "call".to_owned(),
     }
 }
 
 pub fn region(r: Region) -> String {
     match r {
-        Heap() => "Heap".to_string(),
+        Heap => "Heap".to_string(),
         RegionVar(id) => "r".to_owned() + &id.1.to_string(),
     }
 }
 
+pub fn kind_context(kinds: &KindContext) -> String {
+    kinds.iter().map(|entry| 
+        match entry {
+            KCEntryCapability(id, bound) => {
+                let prefix = "c".to_owned() + &id.1.to_string();
+                if bound.len() != 0 {
+                    return prefix + "≤" + &caps(bound)
+                } else { 
+                    return prefix 
+                }
+            }
+            KCEntryRegion(id) => "r".to_owned() + &id.1.to_string(),
+            KCEntryType(id) => "t".to_owned() + &id.1.to_string()
+        }
+    ).collect::<Vec<_>>().join(",")
+}
+
 pub fn caps(cs: &Vec<Capability>) -> String {
-    "{".to_owned() + &cs.iter().map(|c| cap(*c)).collect::<Vec<_>>().join(",") + "}"
+    "{".to_owned() + &cs.iter().map(|c| cap(c.clone())).collect::<Vec<_>>().join(",") + "}"
 }
 
 pub fn cap(c: Capability) -> String {
     match c {
         CapVar(id) => "c".to_owned() + &id.1.to_string(),
-        CapVarBounded(id, _cr) => "c".to_owned() + &id.1.to_string(),
         Owned(r) => "1".to_owned() + &region(r),
         NotOwned(r) => "+".to_owned() + &region(r),
     }
@@ -50,58 +67,59 @@ pub fn types(
     ts: &TypeListRef,
     type_pool: &TypePool,
     tl_pool: &TypeListPool,
-    cap_pool: &CapabilityPool,
 ) -> String {
     tl_pool
         .get(ts)
         .iter()
-        .map(|tr| typ(type_pool.get(tr), type_pool, tl_pool, cap_pool))
+        .map(|tr| typ(tr, type_pool, tl_pool))
         .collect::<Vec<_>>()
         .join(", ")
 }
 
-fn var(id: &Id, k: &Kind, cap_pool: &CapabilityPool) -> String {
+fn var(id: &Id, k: &Kind) -> String {
     match k {
         KRegion => "r".to_owned() + &id.1.to_string(),
         KType => "t".to_owned() + &id.1.to_string(),
-        KCapability(None) => "c".to_owned() + &id.1.to_string(),
-        KCapability(Some(c)) => "c".to_owned() + &id.1.to_string() + "≤" + &caps(cap_pool.get(&c)),
+        KCapability => "c".to_owned() + &id.1.to_string(),
     }
 }
 
 pub fn typ(
-    t: &Type,
+    tr: &TypeRef,
     type_pool: &TypePool,
     tl_pool: &TypeListPool,
-    cap_pool: &CapabilityPool,
 ) -> String {
+    let t = type_pool.get(tr);
     match t {
-        Ti32() => "i32".to_string(),
+        Ti32 => "i32".to_string(),
         THandle(r) => "handle(".to_owned() + &region(*r) + ")",
-        TMutable(tr) => "mut ".to_owned() + &typ(type_pool.get(tr), type_pool, tl_pool, cap_pool),
+        TMutable(tr) => "mut ".to_owned() + &typ(tr, type_pool, tl_pool),
         TTuple(ts, r) => {
-            "(".to_owned() + &types(ts, type_pool, tl_pool, cap_pool) + ")@" + &region(*r)
+            "(".to_owned() + &types(ts, type_pool, tl_pool) + ")@" + &region(*r)
         }
-        TArray(tr) => "[]".to_owned() + &typ(type_pool.get(tr), type_pool, tl_pool, cap_pool),
+        TArray(tr) => "[]".to_owned() + &typ(tr, type_pool, tl_pool),
         TVar(id) => "t".to_owned() + &id.1.to_string(),
-        TForall(id, k, tr) => {
-            "Forall ".to_owned()
-                + &var(&id, k, cap_pool)
-                + ". "
-                + &typ(type_pool.get(tr), type_pool, tl_pool, cap_pool)
-        }
         TExists(id, tr) => {
             "Exists t".to_owned()
                 + &id.1.to_string()
                 + ". "
-                + &typ(type_pool.get(tr), type_pool, tl_pool, cap_pool)
+                + &typ(tr, type_pool, tl_pool)
         }
-        TFunc(c, ts) => {
-            "[".to_owned()
-                + &caps(cap_pool.get(c))
+        TFunc(kinds, c, ts) => {
+            let quantification = 
+                if kinds.len() == 0 {
+                    "".to_owned()
+                } else {
+                    "Forall ".to_owned()
+                    + &kind_context(kinds)
+                    + ". "
+                };
+            let body = "[".to_owned()
+                + &caps(c)
                 + "]("
-                + &types(ts, type_pool, tl_pool, cap_pool)
-                + ")->0"
+                + &types(ts, type_pool, tl_pool)
+                + ")->0";
+            quantification.to_owned() + &body
         }
         TGuess(_) => panic!("type-checking artifact lasted too long"),
     }
@@ -147,7 +165,7 @@ pub fn op_u8(byte: u8) -> String {
 
 pub fn kind(k: Kind) -> String {
     (match k {
-        Kind::KCapability(_) => "capability",
+        Kind::KCapability => "capability",
         Kind::KRegion => "region",
         Kind::KType => "type",
     })

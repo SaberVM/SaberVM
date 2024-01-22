@@ -1,31 +1,32 @@
+
 #[derive(Clone, Copy, Debug)]
 pub enum OpCode1 {
-    Op1Req(),     // 0x00
-    Op1Region(),  // 0x01
-    Op1Heap(),    // 0x02
-    Op1Cap(),     // 0x03
-    Op1CapLE(),   // 0x04
-    Op1Own(),     // 0x05
-    Op1Read(),    // 0x06
-    Op1Both(),    // 0x07
-    Op1Handle(),  // 0x08
-    Op1i32(),     // 0x09
-    Op1End(),     // 0x0A
-    Op1Mut(),     // 0x0B
+    Op1Req,     // 0x00
+    Op1Region,  // 0x01
+    Op1Heap,    // 0x02
+    Op1Cap,     // 0x03
+    Op1CapLE,   // 0x04
+    Op1Own,     // 0x05
+    Op1Read,    // 0x06
+    Op1Both,    // 0x07
+    Op1Handle,  // 0x08
+    Op1i32,     // 0x09
+    Op1End,     // 0x0A
+    Op1Mut,     // 0x0B
     Op1Tuple(u8), // 0x0C
-    Op1Arr(),     // 0x0D
-    Op1All(),     // 0x0E
-    Op1Some(),    // 0x0F
-    Op1Emos(),    // 0x10
+    Op1Arr,     // 0x0D
+    Op1All,     // 0x0E
+    Op1Some,    // 0x0F
+    Op1Emos,    // 0x10
     Op1Func(u8),  // 0x11
     Op1CTGet(u8), // 0x12
-    Op1CTPop(),   // 0x13
-    Op1Unpack(),  // 0x14
+    Op1CTPop,   // 0x13
+    Op1Unpack,  // 0x14
     Op1Get(u8),   // 0x15
     Op1Init(u8),  // 0x16
-    Op1Malloc(),  // 0x17
+    Op1Malloc,  // 0x17
     Op1Proj(u8),  // 0x18
-    Op1Call(),    // 0x19
+    Op1Call,    // 0x19
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -34,7 +35,7 @@ pub enum OpCode2 {
     Op2Init(u8),
     Op2Malloc(u8),
     Op2Proj(u8),
-    Op2Call(),
+    Op2Call,
 }
 
 #[derive(Debug)]
@@ -44,14 +45,14 @@ pub enum Stmt1 {
 
 #[derive(Debug)]
 pub enum Stmt2 {
-    Func2(i32, Type, Vec<OpCode2>),
+    Func2(i32, TypeRef, Vec<OpCode2>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Kind {
     KRegion,
     KType,
-    KCapability(Option<CapabilityRef>),
+    KCapability,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -60,45 +61,35 @@ pub struct Id(pub i32, pub i32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Region {
     RegionVar(Id),
-    Heap(),
+    Heap,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Capability {
     Owned(Region),
     NotOwned(Region),
     CapVar(Id),
-    CapVarBounded(Id, CapabilityRef),
 }
 
-pub struct CapabilityPool(pub Vec<Vec<Capability>>);
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CapabilityRef(u32);
-impl CapabilityPool {
-    pub fn get(&self, r: &CapabilityRef) -> &Vec<Capability> {
-        let CapabilityPool(v) = self;
-        let CapabilityRef(i) = r;
-        &v[*i as usize]
-    }
-    pub fn add(&mut self, cap: Vec<Capability>) -> CapabilityRef {
-        let CapabilityPool(v) = self;
-        let idx = v.len();
-        v.push(cap);
-        CapabilityRef(idx.try_into().expect("too many capabilities in the pool"))
-    }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum KindContextEntry {
+    KCEntryCapability(Id, Vec<Capability>),
+    KCEntryType(Id),
+    KCEntryRegion(Id),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub type KindContext = Vec<KindContextEntry>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Type {
-    Ti32(),
+    Ti32,
     THandle(Region),
     TMutable(TypeRef),
     TTuple(TypeListRef, Region),
     TArray(TypeRef),
     TVar(Id),
-    TForall(Id, Kind, TypeRef),
+    TFunc(KindContext, Vec<Capability>, TypeListRef),
     TExists(Id, TypeRef),
-    TFunc(CapabilityRef, TypeListRef),
     TGuess(i32),
 }
 
@@ -136,16 +127,16 @@ impl TypeListPool {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum CTStackVal {
     CTRegion(Region),
-    CTCapability(CapabilityRef),
+    CTCapability(Vec<Capability>),
     CTType(TypeRef),
 }
 
 pub fn get_kind(ctval: &CTStackVal) -> Kind {
     match ctval {
-        CTStackVal::CTCapability(_) => Kind::KCapability(None),
+        CTStackVal::CTCapability(_) => Kind::KCapability,
         CTStackVal::CTRegion(_) => Kind::KRegion,
         CTStackVal::CTType(_) => Kind::KType
     }
@@ -162,11 +153,11 @@ pub enum Error {
     TypeErrorParamOutOfRange(OpCode1),
     TypeErrorExistentialExpected(TypeRef),
     TypeErrorEmptyStack(OpCode1),
-    CapabilityError(OpCode1, CapabilityRef),
+    CapabilityError(OpCode1, Vec<Capability>),
     TypeErrorInit(TypeRef, TypeRef),
     TypeErrorTupleExpected(OpCode1, TypeRef),
     TypeErrorRegionHandleExpected(OpCode1, TypeRef),
-    // TypeErrorFunctionExpected(OpCode1, TypeRef),
-    TypeErrorNonEmptyExistStack(),
+    TypeErrorFunctionExpected(OpCode1, TypeRef),
+    TypeErrorNonEmptyExistStack,
     ErrorTodo
 }
