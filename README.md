@@ -74,3 +74,9 @@ To see how writing these 70ish bytes looks in practice, go to [example.md](https
 This is very WIP; the purpose of this MVP is not to ship it per se, but mostly to play with the system and figure out what breaking changes need to be made. 
 
 I haven't decided how to handle polymorphism quite yet, because I hope to support nonuniform memory representations and unboxed data. I may surface this to the user in the Kinds Are Calling Conventions approach, or I might go for a Morrisett/Sixten approach by passing around size data for polymorphic values (which would not be surfaced to the user). I may also do a combination of both, for more expressivity. We'll see. I probably won't go the full-monomorphization route, as separate compilation is important to me down the road.
+
+### Sponsors
+
+[<img src="https://github.com/SimonAndCarmen.png" width="60px;"/><br /><sub><a href="https://github.com/SimonAndCarmen">SimonAndCarmen</a></sub>](https://github.com/SimonAndCarmen)
+
+[<img src="https://github.com/emberian.png" width="60px;"/><br /><sub><a href="https://github.com/emberian">emberian</a></sub>](https://github.com/emberian)
