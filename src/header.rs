@@ -1,5 +1,5 @@
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OpCode1 {
     Op1Req,     // 0x00
     Op1Region,  // 0x01
@@ -93,7 +93,7 @@ pub enum Type {
     TGuess(i32),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CTStackVal {
     CTRegion(Region),
     CTCapability(Vec<Capability>),
@@ -110,7 +110,7 @@ pub fn get_kind(ctval: &CTStackVal) -> Kind {
 
 pub type Pos = u32;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     SyntaxErrorParamNeeded(Pos, u8),
     SyntaxErrorUnknownOp(Pos, u8),

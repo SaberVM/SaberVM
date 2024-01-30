@@ -74,22 +74,61 @@ fn parse(tokens: &[OpCode1]) -> Vec<Stmt1> {
     let mut curr = vec![];
     let mut iter = tokens.iter();
     let mut i = 4;
+    let mut pos = 4;
     loop {
         match iter.next() {
             None => break,
             Some(Op1End) => {
-                out.push(Func1(i, curr));
+                out.push(Func1(pos, curr));
+                pos = i;
                 curr = vec![];
             }
             Some(op) => curr.push(*op),
         }
         i += 1;
     }
-    out.push(Func1(i, curr));
+    out.push(Func1(pos, curr));
     out
 }
 
 pub fn go(istream: &[u8]) -> Result<Vec<Stmt1>, Error> {
     let tokens = lex(istream)?;
     Ok(parse(&tokens))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::header::Stmt1::*;
+    use crate::parse;
+    use crate::header::OpCode1::*;
+    use crate::header::Error::*;
+    
+    #[test]
+    fn test_lex() {
+        let input = vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x03];
+        let output = parse::lex(&input);
+        assert_eq!(Ok(vec![Op1Req, Op1CTGet(3)]), output);
+    }
+
+    #[test]
+    fn test_lex_bad() {
+        let input = vec![0x00, 0x00, 0x00, 0x00, 0x12];
+        let output = parse::lex(&input);
+        assert_eq!(Err(SyntaxErrorParamNeeded(0, 0x12)), output);
+    }
+
+    #[test]
+    fn test_parse() {
+        let input = vec![Op1Req, Op1End, Op1Region];
+        
+        let output = parse::parse(&input);
+
+        let Some(stmt1) = output.get(0) else {panic!()};
+        let Func1(4, ops1) = stmt1 else {panic!()};
+        assert!(ops1.len() == 1);
+
+        let Some(stmt2) = output.get(1) else {panic!()};
+        let Func1(5, ops2) = stmt2 else {panic!()};
+        assert!(ops2.len() == 1);
+    }
 }
