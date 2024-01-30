@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::iter::Take;
-use std::slice::Iter;
 
 use crate::header::CTStackVal;
 use crate::header::CTStackVal::*;
@@ -24,20 +22,14 @@ use crate::header::Stmt2;
 use crate::header::Stmt2::*;
 use crate::header::Type;
 use crate::header::Type::*;
+use crate::pretty;
 
-pub fn go(
-    stmts: Vec<Stmt1>
-) -> Result<Vec<Stmt2>, Error> {
+pub fn go(stmts: Vec<Stmt1>) -> Result<Vec<Stmt2>, Error> {
     let mut out: Vec<Stmt2> = vec![];
     let stmts2: Vec<(Stmt2, Constraints)> = stmts
         .iter()
         .map(|stmt| pass(stmt))
         .collect::<Result<Vec<_>, Error>>()?;
-    // let mut types: HashMap<i32, Type> = HashMap::new();
-    // for pair in &stmts2 {
-    //     let (Func2(label, t, _), _) = pair;
-    //     types.insert(*label, *t);
-    // }
     let mut constraints: Constraints = HashMap::new();
     for pair in stmts2 {
         // TODO: check that the expected types of global functions are their actual types
@@ -52,9 +44,7 @@ type StackType = VecDeque<Type>;
 type CTStackType = Vec<CTStackVal>;
 type Constraints = HashMap<i32, (StackType, CTStackType)>;
 
-fn pass(
-    stmt: &Stmt1,
-) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>), Error> {
+fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>), Error> {
     let mut ct_stack: CTStackType = vec![];
     let Func1(label, ops) = stmt;
     let mut iter = ops.iter();
@@ -120,7 +110,7 @@ fn pass(
                 Op1Own => {
                     let mb_r = ct_stack.pop();
                     match mb_r {
-                        Some(CTRegion(r)) => ct_stack.push(CTCapability(vec![Owned(r)])),
+                        Some(CTRegion(r)) => ct_stack.push(CTCapability(vec![Unique(r)])),
                         Some(x) => return Err(KindError(*op, KRegion, x)),
                         None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
@@ -128,7 +118,7 @@ fn pass(
                 Op1Read => {
                     let mb_r = ct_stack.pop();
                     match mb_r {
-                        Some(CTRegion(r)) => ct_stack.push(CTCapability(vec![NotOwned(r)])),
+                        Some(CTRegion(r)) => ct_stack.push(CTCapability(vec![ReadWrite(r)])),
                         Some(x) => return Err(KindError(*op, KRegion, x)),
                         None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
@@ -180,9 +170,7 @@ fn pass(
                     }
                     let mb_r = ct_stack.pop();
                     match mb_r {
-                        Some(CTRegion(r)) => {
-                            ct_stack.push(CTType(TTuple(ts, r)))
-                        }
+                        Some(CTRegion(r)) => ct_stack.push(CTType(TTuple(ts, r))),
                         Some(x) => return Err(KindError(*op, KRegion, x)),
                         None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
@@ -216,9 +204,7 @@ fn pass(
                         Some(id) => {
                             let mb_t = ct_stack.pop();
                             match mb_t {
-                                Some(CTType(t)) => {
-                                    ct_stack.push(CTType(TExists(id, Box::new(t))))
-                                }
+                                Some(CTType(t)) => ct_stack.push(CTType(TExists(id, Box::new(t)))),
                                 Some(x) => return Err(KindError(*op, KType, x)),
                                 None => return Err(TypeErrorEmptyCTStack(*op)),
                             }
@@ -237,9 +223,7 @@ fn pass(
                     }
                     let mb_c = ct_stack.pop();
                     match mb_c {
-                        Some(CTCapability(c)) => {
-                            ct_stack.push(CTType(TFunc(vec![], c, ts)))
-                        }
+                        Some(CTCapability(c)) => ct_stack.push(CTType(TFunc(vec![], c, ts))),
                         Some(x) => return Err(KindError(*op, KCapability, x)),
                         None => return Err(TypeErrorEmptyCTStack(*op)),
                     }
@@ -366,36 +350,68 @@ fn pass(
                 Op1Call => {
                     let mb_t = stack_type.pop_back();
                     match mb_t {
-                        Some(t) => {
-                            match t {
-                                TGuess(l) => {
-                                    constraints.insert(l, (stack_type.clone(), ct_stack.clone()));
-                                }
-                                TFunc(quantified, caps_needed, args) => {
-                                    let instantiation = ct_stack.iter().take(quantified.len());
-                                    let caps_present = &capabilities_needed;
-                                    let arg_ts_needed = &args;
-                                    let arg_ts_present =
-                                        stack_type.iter().take(arg_ts_needed.len()).map(|t| t.clone()).collect();
-                                    let (rgn_assignments, cap_assignments, type_assignments) =
-                                        instantiate(instantiation, quantified, &capability_bounds)?;
-                                    let caps_are_sufficient = caps_satisfy_caps_with_subs(
-                                        caps_present,
-                                        &caps_needed,
-                                        &capability_bounds,
-                                        &cap_assignments,
-                                        &rgn_assignments,
-                                    );
-                                    if !caps_are_sufficient {
-                                        return Err(ErrorTodo("insufficient capabilities for call".to_owned()));
-                                    }
-                                    if !type_lists_eq_with_subs(&arg_ts_present, arg_ts_needed, &rgn_assignments, &type_assignments) {
-                                        return Err(ErrorTodo("incorrect types for call".to_owned()));
-                                    }
-                                }
-                                _ => return Err(TypeErrorFunctionExpected(*op, t)),
+                        Some(t) => match t {
+                            TGuess(l) => {
+                                constraints.insert(l, (stack_type.clone(), ct_stack.clone()));
                             }
-                        }
+                            TFunc(quantified, caps_needed, args) => {
+                                let mut instantiation = vec![];
+                                for _ in 0..quantified.len() {
+                                    match ct_stack.pop() {
+                                        Some(ctval) => instantiation.push(ctval),
+                                        None => return Err(ErrorTodo("not enough arguments on the compile-time stack to call the function".to_owned()))
+                                    }
+                                }
+                                let caps_present = &capabilities_needed;
+                                let arg_ts_needed = &args;
+                                let mut arg_ts_present = vec![];
+                                for _ in 0..arg_ts_needed.len() {
+                                    match stack_type.pop_back() {
+                                        Some(t) => arg_ts_present.push(t.clone()),
+                                        None => {
+                                            return Err(ErrorTodo("not enough arguments on the stack to call the function!".to_owned()));
+                                        }
+                                    }
+                                }
+                                let (rgn_assignments, cap_assignments, type_assignments) =
+                                    instantiate(instantiation, quantified, &capability_bounds)?;
+                                let caps_needed_subbed = substitute_c(&caps_needed, &rgn_assignments, &cap_assignments);
+                                let caps_are_sufficient = caps_satisfy_caps(caps_present, &caps_needed_subbed, &capability_bounds);
+                                if !caps_are_sufficient {
+                                    dbg!(pretty::caps(&caps_present));
+                                    dbg!(pretty::caps(&caps_needed_subbed));
+                                    return Err(ErrorTodo(
+                                        "insufficient capabilities for call".to_owned(),
+                                    ));
+                                }
+                                let types_match = arg_ts_present.iter().zip(arg_ts_needed.iter()).all(|(t1, t2)| {
+                                    type_eq(
+                                        t1,
+                                        &substitute_t(
+                                            t2,
+                                            &type_assignments,
+                                            &rgn_assignments,
+                                            &cap_assignments,
+                                        ),
+                                    )
+                                });
+                                if !types_match {
+                                    let arg_ts_present = arg_ts_present
+                                        .iter()
+                                        .map(|t| pretty::typ(&t))
+                                        .collect::<Vec<_>>();
+                                    dbg!(&arg_ts_present);
+                                    let arg_ts_needed = arg_ts_needed
+                                        .iter()
+                                        .map(|t| substitute_t(t, &type_assignments, &rgn_assignments, &cap_assignments))
+                                        .map(|t| pretty::typ(&t))
+                                        .collect::<Vec<_>>();
+                                    dbg!(&arg_ts_needed);
+                                    return Err(ErrorTodo("incorrect types for call".to_owned()));
+                                }
+                            }
+                            _ => return Err(TypeErrorFunctionExpected(*op, t)),
+                        },
                         None => return Err(TypeErrorEmptyStack(*op)),
                     }
                     op2s.push(Op2Call)
@@ -406,11 +422,7 @@ fn pass(
     if exist_stack.len() > 0 {
         return Err(TypeErrorNonEmptyExistStack);
     }
-    let t = TFunc(
-        kind_context,
-        capabilities_needed,
-        arg_types,
-    );
+    let t = TFunc(kind_context, capabilities_needed, arg_types);
     Ok((Func2(*label, t, op2s), constraints))
 }
 
@@ -420,7 +432,7 @@ fn capable_read_write(
     cap_bounds: &HashMap<Id, Vec<Capability>>,
 ) -> bool {
     match c {
-        Owned(r2) | NotOwned(r2) if *r == *r2 => true,
+        Unique(r2) | ReadWrite(r2) if *r == *r2 => true,
         CapVar(id) => {
             let cs = cap_bounds.get(id).unwrap();
             cs.iter().any(|c| capable_read_write(r, c, cap_bounds))
@@ -430,7 +442,7 @@ fn capable_read_write(
 }
 
 fn instantiate(
-    mut ct_args: Take<Iter<'_, CTStackVal>>,
+    ct_args: Vec<CTStackVal>,
     quantified: KindContext,
     cap_bounds: &HashMap<Id, Vec<Capability>>,
 ) -> Result<
@@ -441,12 +453,16 @@ fn instantiate(
     ),
     Error,
 > {
+    let mut ct_args = ct_args.iter();
     let mut cap_assignments: HashMap<Id, Vec<Capability>> = HashMap::new();
     let mut rgn_assignments: HashMap<Id, Region> = HashMap::new();
     let mut type_assignments: HashMap<Id, Type> = HashMap::new();
     if ct_args.len() != quantified.len() {
-        return Err(ErrorTodo("not enough ct stack vals to instantiate call".to_owned()));
+        return Err(ErrorTodo(
+            "not enough ct stack vals to instantiate call".to_owned(),
+        ));
     }
+
     for entry in quantified {
         let actual = ct_args.next().unwrap();
         match entry {
@@ -456,22 +472,36 @@ fn instantiate(
                     if caps_satisfy_caps(c, &bound, &cap_bounds) {
                         cap_assignments.insert(id, c.to_vec());
                     } else {
-                        return Err(ErrorTodo("insufficient caps for capvar instantiation".to_owned()));
+                        return Err(ErrorTodo(
+                            "insufficient caps for capvar instantiation".to_owned(),
+                        ));
                     }
                 }
-                _ => return Err(ErrorTodo("kind error, instantiated a capvar with a noncap".to_owned())),
+                _ => {
+                    return Err(ErrorTodo(
+                        "kind error, instantiated a capvar with a noncap".to_owned(),
+                    ))
+                }
             },
             KCEntryRegion(id, _) => match actual {
                 CTRegion(r) => {
                     rgn_assignments.insert(id, *r);
                 }
-                _ => return Err(ErrorTodo("kind error, instantiated a rgnvar with a nonrgn".to_owned())), // kind error- instantiated rgn var with a nonrgn
+                _ => {
+                    return Err(ErrorTodo(
+                        "kind error, instantiated a rgnvar with a nonrgn".to_owned(),
+                    ))
+                } // kind error- instantiated rgn var with a nonrgn
             },
             KCEntryType(id, _) => match actual {
                 CTType(t) => {
                     type_assignments.insert(id, t.clone());
                 }
-                _ => return Err(ErrorTodo("kind error, instantiated a tvar with a nontype".to_owned())), // kind error- instantiated type var with a nontype
+                _ => {
+                    return Err(ErrorTodo(
+                        "kind error, instantiated a tvar with a nontype".to_owned(),
+                    ))
+                } // kind error- instantiated type var with a nontype
             },
         }
     }
@@ -485,10 +515,11 @@ fn cap_subtype(
     cap_bounds: &HashMap<Id, Vec<Capability>>,
 ) -> bool {
     match (c1, c2) {
-        (Owned(r1), Owned(r2)) if r1 == r2 => true,
-        (Owned(r1), NotOwned(r2)) if r1 == r2 => true,
-        (NotOwned(r1), NotOwned(r2)) if r1 == r2 => true,
-        (NotOwned(_), Owned(_)) => false,
+        (Unique(r1), Unique(r2)) if r1 == r2 => true,
+        (Unique(r1), ReadWrite(r2)) if r1 == r2 => true,
+        (ReadWrite(r1), ReadWrite(r2)) if r1 == r2 => true,
+        (ReadWrite(_), Unique(_)) => false,
+        (CapVar(id1), CapVar(id2)) if id1 == id2 => true,
         (CapVar(id), c2) => {
             let bound = cap_bounds.get(id).unwrap();
             caps_satisfy_cap(bound, c2, cap_bounds)
@@ -498,7 +529,7 @@ fn cap_subtype(
 }
 
 fn caps_satisfy_cap(
-    caps: &Vec<Capability>,
+    caps: &[Capability],
     cap: &Capability,
     cap_bounds: &HashMap<Id, Vec<Capability>>,
 ) -> bool {
@@ -506,137 +537,73 @@ fn caps_satisfy_cap(
 }
 
 fn caps_satisfy_caps(
-    caps1: &Vec<Capability>,
-    caps2: &Vec<Capability>,
+    caps1: &[Capability],
+    caps2: &[Capability],
     cap_bounds: &HashMap<Id, Vec<Capability>>,
 ) -> bool {
     caps2.iter().all(|c| caps_satisfy_cap(caps1, c, cap_bounds))
 }
 
-fn caps_satisfy_caps_with_subs(
-    caps1: &Vec<Capability>,
-    caps2: &Vec<Capability>,
-    cap_bounds: &HashMap<Id, Vec<Capability>>,
-    cap_assignments: &HashMap<Id, Vec<Capability>>,
-    rgn_assignments: &HashMap<Id, Region>,
-) -> bool {
-    // this function seems like it could be a spot for optimization later
-    for c in caps2 {
-        match c {
-            CapVar(id) => match cap_assignments.get(id) {
-                Some(cs) => {
-                    if !caps_satisfy_caps(caps1, cs, cap_bounds) {
-                        return false;
-                    }
-                }
-                None => {
-                    if !caps_satisfy_cap(caps1, c, cap_bounds) {
-                        return false;
-                    }
-                }
-            },
-            Owned(RegionVar(id)) => match rgn_assignments.get(id) {
-                Some(r) => {
-                    if !caps_satisfy_cap(caps1, &Owned(*r), cap_bounds) {
-                        return false;
-                    }
-                }
-                None => {
-                    if !caps_satisfy_cap(caps1, c, cap_bounds) {
-                        return false;
-                    }
-                }
-            },
-            NotOwned(RegionVar(id)) => match rgn_assignments.get(id) {
-                Some(r) => {
-                    if !caps_satisfy_cap(caps1, &NotOwned(*r), cap_bounds) {
-                        return false;
-                    }
-                }
-                None => {
-                    if !caps_satisfy_cap(caps1, c, cap_bounds) {
-                        return false;
-                    }
-                }
-            },
-            _ =>
-            // there are no substitutions to be made for this needed capability
-            {
-                if !caps_satisfy_cap(caps1, c, cap_bounds) {
-                    return false;
-                }
-            }
-        }
+fn substitute_t(
+    t: &Type,
+    tsubs: &HashMap<Id, Type>,
+    rsubs: &HashMap<Id, Region>,
+    csubs: &HashMap<Id, Vec<Capability>>,
+) -> Type {
+    match t {
+        Ti32 => Ti32,
+        THandle(r) => THandle(substitute_r(r, rsubs)),
+        TMutable(t) => TMutable(Box::new(substitute_t(t, tsubs, rsubs, csubs))),
+        TTuple(ts, r) => TTuple(
+            ts.iter()
+                .map(|t| substitute_t(t, tsubs, rsubs, csubs))
+                .collect(),
+            substitute_r(r, rsubs),
+        ),
+        TArray(t) => TArray(Box::new(substitute_t(t, tsubs, rsubs, csubs))),
+        TVar(id) => match tsubs.get(id) {
+            Some(new) => new.clone(),
+            None => TVar(*id),
+        },
+        TFunc(kind_context, caps, args) => TFunc(
+            kind_context.clone(),
+            substitute_c(caps, rsubs, csubs),
+            args.iter()
+                .map(|t| substitute_t(t, tsubs, rsubs, csubs))
+                .collect(),
+        ),
+        TExists(x, t) => TExists(*x, Box::new(substitute_t(t, tsubs, rsubs, csubs))),
+        TGuess(label) => TGuess(*label),
     }
-    // every needed capability (under substitution) was satisfied if we made it this far
-    return true;
 }
 
-fn type_eq_with_subs(nonsubbable: &Type, subbable: &Type, type_assignments: &HashMap<Id, Type>, rgn_assignments: &HashMap<Id, Region>) -> bool {
-    match (nonsubbable, subbable) {
-        (TVar(id1), TVar(id2)) if id1 == id2 => true,
-        (_, TVar(id)) =>
-            match type_assignments.get(id) {
-                Some(t) => type_eq(nonsubbable, t),
-                None => false
-            }
-        (Ti32, Ti32) => true,
-        (THandle(r1), THandle(r2)) =>
-            match r2 {
-                RegionVar(id) =>
-                    match rgn_assignments.get(id) {
-                        Some(r2) => r1 == r2,
-                        None => r1 == r2
-                    }
-                Heap => r1 == r2
-            }
-        (TMutable(t1), TMutable(t2)) => type_eq_with_subs(t1, t2, type_assignments, rgn_assignments),
-        (TTuple(ts1, r1), TTuple(ts2, r2)) => {
-            let types_eq = type_lists_eq_with_subs(ts1, ts2, rgn_assignments, type_assignments);
-            match r2 {
-                RegionVar(id) =>
-                    match rgn_assignments.get(id) {
-                        Some(r2) => r1 == r2 && types_eq,
-                        None => r1 == r2 && types_eq
-                    }
-                Heap => r1 == r2 && types_eq
-            }
-        }
-        (TArray(t1), TArray(t2)) => type_eq_with_subs(t1, t2, type_assignments, rgn_assignments),
-        (TFunc(kind_context1, _caps1, ts1), TFunc(kind_context2, _caps2, ts2)) => {
-            if kind_context1.len() != kind_context2.len() {
-                return false;
-            }
-            let mut kind_context2_iter = kind_context2.iter();
-            let mut cap_assignments = HashMap::new();
-            let mut rgn_assignments = rgn_assignments.clone();
-            let mut type_assignments = type_assignments.clone();
-            for entry1 in kind_context1 {
-                let entry2 = kind_context2_iter.next().unwrap();
-                match (entry1, entry2) {
-                    (KCEntryCapability(_id1, _bound1, c1), KCEntryCapability(id2, _bound2, _)) => {
-                        // TODO: check capability equivalence of bounds
-                        cap_assignments.insert(*id2, c1);
-                    }
-                    (KCEntryRegion(_, r), KCEntryRegion(id2, _)) => {
-                        rgn_assignments.insert(*id2, *r);
-                    }
-                    (KCEntryType(_, t), KCEntryType(id2, _)) => {
-                        type_assignments.insert(*id2, t.clone());
-                    }
-                    _ => return false
-                }
-            }
-            if !type_lists_eq_with_subs(ts1, ts2, &rgn_assignments, &type_assignments) {
-                return false
-            }
-            // TODO: check capability equivalence
-            true
-        }
-        (TExists(id1, tr1), TExists(id2, tr2)) => todo!(),
-        (TGuess(label1), TGuess(label2)) => label1 == label2,
-        (_, _) => false
+fn substitute_r(r: &Region, rsubs: &HashMap<Id, Region>) -> Region {
+    match r {
+        Heap => Heap,
+        RegionVar(id) => match rsubs.get(id) {
+            Some(new) => new.clone(),
+            None => RegionVar(*id),
+        },
     }
+}
+
+fn substitute_c(
+    caps: &Vec<Capability>,
+    rsubs: &HashMap<Id, Region>,
+    csubs: &HashMap<Id, Vec<Capability>>,
+) -> Vec<Capability> {
+    let mut out = vec![];
+    for c in caps {
+        match c {
+            Unique(r) => out.push(Unique(substitute_r(r, rsubs))),
+            ReadWrite(r) => out.push(ReadWrite(substitute_r(r, rsubs))),
+            CapVar(id) => match csubs.get(id) {
+                Some(new) => out.extend(new.clone()),
+                None => out.push(CapVar(*id)),
+            },
+        }
+    }
+    return out;
 }
 
 fn type_eq(t1: &Type, t2: &Type) -> bool {
@@ -644,10 +611,21 @@ fn type_eq(t1: &Type, t2: &Type) -> bool {
         (Ti32, Ti32) => true,
         (THandle(r1), THandle(r2)) => r1 == r2,
         (TMutable(t1), TMutable(t2)) => type_eq(t1, t2),
-        (TTuple(tsr1, r1), TTuple(tsr2, r2)) => r1 == r2 && type_lists_eq(tsr1, tsr2),
+        (TTuple(ts1, r1), TTuple(ts2, r2)) => {
+            r1 == r2 && ts1.len() == ts2.len() && {
+                let mut ts2 = ts2.iter();
+                for t1 in ts1 {
+                    let t2 = ts2.next().unwrap();
+                    if !type_eq(t1, t2) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
         (TArray(t1), TArray(t2)) => type_eq(t1, t2),
         (TVar(id1), TVar(id2)) => id1 == id2,
-        (TFunc(kind_context1, _caps1, tsr1), TFunc(kind_context2, _caps2, tsr2)) => {
+        (TFunc(kind_context1, _caps1, ts1), TFunc(kind_context2, _caps2, ts2)) => {
             if kind_context1.len() != kind_context2.len() {
                 return false;
             }
@@ -660,7 +638,7 @@ fn type_eq(t1: &Type, t2: &Type) -> bool {
                 match (entry1, entry2) {
                     (KCEntryCapability(id1, _bound1, _), KCEntryCapability(id2, _bound2, _)) => {
                         // TODO: check capability equivalence of bounds
-                        cap_assignments.insert(id2, id1);
+                        cap_assignments.insert(*id2, vec![CapVar(*id1)]);
                     }
                     (KCEntryRegion(id1, _), KCEntryRegion(id2, _)) => {
                         rgn_assignments.insert(*id2, RegionVar(*id1));
@@ -668,11 +646,17 @@ fn type_eq(t1: &Type, t2: &Type) -> bool {
                     (KCEntryType(id1, _), KCEntryType(id2, _)) => {
                         type_assignments.insert(*id2, TVar(*id1));
                     }
-                    _ => return false
+                    _ => return false,
                 }
             }
-            if !type_lists_eq_with_subs(tsr1, tsr2, &rgn_assignments, &type_assignments) {
-                return false
+            let types_match = ts1.iter().zip(ts2.iter()).all(|(t1, t2)| {
+                type_eq(
+                    t1,
+                    &substitute_t(t2, &type_assignments, &rgn_assignments, &cap_assignments),
+                )
+            });
+            if !types_match {
+                return false;
             }
             // TODO: check capability equivalence
             true
@@ -680,37 +664,10 @@ fn type_eq(t1: &Type, t2: &Type) -> bool {
         (TExists(id1, t1), TExists(id2, t2)) => {
             let mut sub = HashMap::new();
             sub.insert(*id2, TVar(*id1));
-            type_eq_with_subs(t1, t2, &sub, &HashMap::new())
+            let t2_subbed = substitute_t(t2, &sub, &HashMap::new(), &HashMap::new());
+            type_eq(t1, &t2_subbed)
         }
         (TGuess(label1), TGuess(label2)) => label1 == label2,
-        (_, _) => false
+        (_, _) => false,
     }
-}
-
-fn type_lists_eq(ts1: &Vec<Type>, ts2: &Vec<Type>) -> bool {
-    let mut ts2 = ts2.iter();
-    if ts1.len() != ts2.len() {
-        return false;
-    }
-    for t1 in ts1 {
-        let t2 = ts2.next().unwrap();
-        if !type_eq(t1, t2) {
-            return false;
-        }
-    }
-    return true;
-}
-
-fn type_lists_eq_with_subs(ts1: &Vec<Type>, ts2: &Vec<Type>, rgn_assignments: &HashMap<Id, Region>, type_assignments: &HashMap<Id, Type>) -> bool {
-    let mut ts2 = ts2.iter();
-    if ts1.len() != ts2.len() {
-        return false;
-    }
-    for t1 in ts1 {
-        let t2 = ts2.next().unwrap();
-        if !type_eq_with_subs(t1, t2, type_assignments, rgn_assignments) {
-            return false;
-        }
-    }
-    return true;
 }

@@ -55,8 +55,8 @@ pub fn caps(cs: &Vec<Capability>) -> String {
 pub fn cap(c: Capability) -> String {
     match c {
         CapVar(id) => "c".to_owned() + &id.1.to_string(),
-        Owned(r) => "1".to_owned() + &region(r),
-        NotOwned(r) => "+".to_owned() + &region(r),
+        Unique(r) => "1".to_owned() + &region(r),
+        ReadWrite(r) => "+".to_owned() + &region(r),
     }
 }
 

@@ -66,8 +66,8 @@ pub enum Region {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Capability {
-    Owned(Region),
-    NotOwned(Region),
+    Unique(Region),
+    ReadWrite(Region),
     CapVar(Id),
 }
 
