@@ -40,12 +40,12 @@ pub enum OpCode2 {
 
 #[derive(Debug)]
 pub enum Stmt1 {
-    Func1(i32, Vec<OpCode1>),
+    Func1(Pos, Vec<OpCode1>),
 }
 
 #[derive(Debug)]
 pub enum Stmt2 {
-    Func2(i32, Type, Vec<OpCode2>),
+    Func2(Pos, Type, Vec<OpCode2>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -56,7 +56,7 @@ pub enum Kind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Id(pub i32, pub i32);
+pub struct Id(pub Pos, pub i32);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Region {
@@ -108,22 +108,28 @@ pub fn get_kind(ctval: &CTStackVal) -> Kind {
     }
 }
 
+pub type Pos = u32;
+
 #[derive(Debug)]
 pub enum Error {
-    SyntaxErrorParamNeeded(u8),
-    SyntaxErrorUnknownOp(u8),
-    TypeErrorEmptyCTStack(OpCode1),
-    KindErrorReq(CTStackVal),
-    KindError(OpCode1, Kind, CTStackVal),
-    TypeErrorEmptyExistStack(OpCode1),
-    TypeErrorParamOutOfRange(OpCode1),
-    TypeErrorExistentialExpected(Type),
-    TypeErrorEmptyStack(OpCode1),
-    CapabilityError(OpCode1, Vec<Capability>),
-    TypeErrorInit(Type, Type),
-    TypeErrorTupleExpected(OpCode1, Type),
-    TypeErrorRegionHandleExpected(OpCode1, Type),
-    TypeErrorFunctionExpected(OpCode1, Type),
-    TypeErrorNonEmptyExistStack,
-    ErrorTodo(String)
+    SyntaxErrorParamNeeded(Pos, u8),
+    SyntaxErrorUnknownOp(Pos, u8),
+    TypeErrorEmptyCTStack(Pos, OpCode1),
+    KindErrorReq(Pos, CTStackVal),
+    KindError(Pos, OpCode1, Kind, CTStackVal),
+    TypeErrorEmptyExistStack(Pos, OpCode1),
+    TypeErrorParamOutOfRange(Pos, OpCode1),
+    TypeErrorExistentialExpected(Pos, Type),
+    TypeErrorEmptyStack(Pos, OpCode1),
+    CapabilityError(Pos, OpCode1, Vec<Capability>, Vec<Capability>), // expected, found
+    TypeErrorInit(Pos, Type, Type), // expected, found
+    TypeErrorTupleExpected(Pos, OpCode1, Type),
+    TypeErrorRegionHandleExpected(Pos, OpCode1, Type),
+    TypeErrorFunctionExpected(Pos, OpCode1, Type),
+    TypeErrorNonEmptyExistStack(Pos),
+    TypeErrorNotEnoughCompileTimeArgs(Pos, usize, usize), // expected, found
+    TypeErrorNotEnoughRuntimeArgs(Pos, usize, usize), // expected, found
+    TypeErrorCallArgTypesMismatch(Pos, Vec<Type>, Vec<Type>), // expected, found
+    CapabilityErrorBadInstantiation(Pos, Vec<Capability>, Vec<Capability>), // expected, found
+    KindErrorBadInstantiation(Pos, Kind, CTStackVal),
 }

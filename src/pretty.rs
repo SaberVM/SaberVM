@@ -1,11 +1,11 @@
 use crate::header::CTStackVal;
 use crate::header::Capability;
 use crate::header::Capability::*;
-use crate::header::Id;
 use crate::header::Kind;
-use crate::header::Kind::*;
 use crate::header::KindContext;
 use crate::header::KindContextEntry::*;
+use crate::header::OpCode1;
+use crate::header::OpCode1::*;
 use crate::header::OpCode2;
 use crate::header::OpCode2::*;
 use crate::header::Region;
@@ -70,13 +70,13 @@ pub fn types(
         .join(", ")
 }
 
-fn var(id: &Id, k: &Kind) -> String {
-    match k {
-        KRegion => "r".to_owned() + &id.1.to_string(),
-        KType => "t".to_owned() + &id.1.to_string(),
-        KCapability => "c".to_owned() + &id.1.to_string(),
-    }
-}
+// fn var(id: &Id, k: &Kind) -> String {
+//     match k {
+//         KRegion => "r".to_owned() + &id.1.to_string(),
+//         KType => "t".to_owned() + &id.1.to_string(),
+//         KCapability => "c".to_owned() + &id.1.to_string(),
+//     }
+// }
 
 pub fn typ(
     t: &Type,
@@ -152,6 +152,37 @@ pub fn op_u8(byte: u8) -> String {
         _ => panic!("unknown opcode {}", byte),
     })
     .to_owned()
+}
+
+pub fn op1(op: OpCode1) -> String {
+    match op {
+        Op1Req => "req".to_owned(),
+        Op1Region => "region".to_owned(),
+        Op1Heap => "heap".to_owned(),
+        Op1Cap => "cap".to_owned(),
+        Op1CapLE => "cap_le".to_owned(),
+        Op1Own => "own".to_owned(),
+        Op1Read => "read".to_owned(),
+        Op1Both => "both".to_owned(),
+        Op1Handle => "handle".to_owned(),
+        Op1i32 => "i32".to_owned(),
+        Op1End => "END_FUNC".to_owned(),
+        Op1Mut => "mut".to_owned(),
+        Op1Tuple(n) => format!("tuple {}", n.to_string()),
+        Op1Arr => "arr".to_owned(),
+        Op1All => "all".to_owned(),
+        Op1Some => "some".to_owned(),
+        Op1Emos => "emos".to_owned(),
+        Op1Func(n) => format!("func {}", n.to_string()),
+        Op1CTGet(n) => format!("ct_get {}", n.to_string()),
+        Op1CTPop => "ct_pop".to_owned(),
+        Op1Unpack => "unpack".to_owned(),
+        Op1Get(n) => format!("get {}", n.to_string()),
+        Op1Init(n) => format!("init {}", n.to_string()),
+        Op1Malloc => "malloc".to_owned(),
+        Op1Proj(n) => format!("proj {}", n.to_string()),
+        Op1Call => "call".to_owned()
+    }
 }
 
 pub fn kind(k: Kind) -> String {

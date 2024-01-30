@@ -16,8 +16,8 @@ fn go(
 
     let stmts = verify::go(prog)?;
     let p = &stmts[0];
-    let Func2(_, tr, ops) = p;
-    dbg!(pretty::typ(&tr));
+    let Func2(_, t, ops) = p;
+    dbg!(pretty::typ(&t));
     for op in ops {
         println!("{}", pretty::op2(&op))
     }

@@ -14,6 +14,7 @@ use crate::header::KindContextEntry::*;
 use crate::header::OpCode1::*;
 use crate::header::OpCode2;
 use crate::header::OpCode2::*;
+use crate::header::Pos;
 use crate::header::Region;
 use crate::header::Region::*;
 use crate::header::Stmt1;
@@ -22,7 +23,6 @@ use crate::header::Stmt2;
 use crate::header::Stmt2::*;
 use crate::header::Type;
 use crate::header::Type::*;
-use crate::pretty;
 
 pub fn go(stmts: Vec<Stmt1>) -> Result<Vec<Stmt2>, Error> {
     let mut out: Vec<Stmt2> = vec![];
@@ -59,19 +59,20 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
     let mut op2s: Vec<OpCode2> = vec![];
     let mut fresh_id = 0;
     let mut constraints = HashMap::new();
+    let mut pos = *label;
     loop {
         match iter.next() {
             None => break,
             Some(op) => match op {
                 Op1Req => match ct_stack.pop() {
-                    None => return Err(TypeErrorEmptyCTStack(*op)),
+                    None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                     Some(CTType(t)) => {
                         arg_types.push(t.clone());
                         stack_type.push_front(t);
                     }
                     Some(CTCapability(cs)) => capabilities_needed.extend(cs),
                     Some(x) => {
-                        return Err(KindErrorReq(x));
+                        return Err(KindErrorReq(pos, x));
                     }
                 },
                 Op1Region => {
@@ -103,24 +104,24 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                             kind_context.push(KCEntryCapability(id, bound, var));
                             fresh_id += 1;
                         }
-                        Some(x) => return Err(KindError(*op, KCapability, x)),
-                        None => return Err(TypeErrorEmptyCTStack(*op)),
+                        Some(x) => return Err(KindError(pos, *op, KCapability, x)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                     }
                 }
                 Op1Own => {
                     let mb_r = ct_stack.pop();
                     match mb_r {
                         Some(CTRegion(r)) => ct_stack.push(CTCapability(vec![Unique(r)])),
-                        Some(x) => return Err(KindError(*op, KRegion, x)),
-                        None => return Err(TypeErrorEmptyCTStack(*op)),
+                        Some(x) => return Err(KindError(pos, *op, KRegion, x)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                     }
                 }
                 Op1Read => {
                     let mb_r = ct_stack.pop();
                     match mb_r {
                         Some(CTRegion(r)) => ct_stack.push(CTCapability(vec![ReadWrite(r)])),
-                        Some(x) => return Err(KindError(*op, KRegion, x)),
-                        None => return Err(TypeErrorEmptyCTStack(*op)),
+                        Some(x) => return Err(KindError(pos, *op, KRegion, x)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                     }
                 }
                 Op1Both => {
@@ -132,20 +133,20 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                                 Some(CTCapability(c2)) => {
                                     ct_stack.push(CTCapability([&c1[..], &c2[..]].concat()))
                                 }
-                                Some(x) => return Err(KindError(*op, KCapability, x)),
-                                None => return Err(TypeErrorEmptyCTStack(*op)),
+                                Some(x) => return Err(KindError(pos, *op, KCapability, x)),
+                                None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                             }
                         }
-                        Some(x) => return Err(KindError(*op, KCapability, x)),
-                        None => return Err(TypeErrorEmptyCTStack(*op)),
+                        Some(x) => return Err(KindError(pos, *op, KCapability, x)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                     }
                 }
                 Op1Handle => {
                     let mb_r = ct_stack.pop();
                     match mb_r {
                         Some(CTRegion(r)) => ct_stack.push(CTType(THandle(r))),
-                        Some(x) => return Err(KindError(*op, KRegion, x)),
-                        None => return Err(TypeErrorEmptyCTStack(*op)),
+                        Some(x) => return Err(KindError(pos, *op, KRegion, x)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                     }
                 }
                 Op1i32 => ct_stack.push(CTType(Ti32)),
@@ -154,8 +155,8 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                     let mb_t = ct_stack.pop();
                     match mb_t {
                         Some(CTType(t)) => ct_stack.push(CTType(TMutable(Box::new(t)))),
-                        Some(x) => return Err(KindError(*op, KType, x)),
-                        None => return Err(TypeErrorEmptyCTStack(*op)),
+                        Some(x) => return Err(KindError(pos, *op, KType, x)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                     }
                 }
                 Op1Tuple(n) => {
@@ -164,23 +165,23 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                         let mb_t = ct_stack.pop();
                         match mb_t {
                             Some(CTType(t)) => ts.push(t),
-                            Some(x) => return Err(KindError(*op, KType, x)),
-                            None => return Err(TypeErrorEmptyCTStack(*op)),
+                            Some(x) => return Err(KindError(pos, *op, KType, x)),
+                            None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                         }
                     }
                     let mb_r = ct_stack.pop();
                     match mb_r {
                         Some(CTRegion(r)) => ct_stack.push(CTType(TTuple(ts, r))),
-                        Some(x) => return Err(KindError(*op, KRegion, x)),
-                        None => return Err(TypeErrorEmptyCTStack(*op)),
+                        Some(x) => return Err(KindError(pos, *op, KRegion, x)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                     }
                 }
                 Op1Arr => {
                     let mb_t = ct_stack.pop();
                     match mb_t {
                         Some(CTType(t)) => ct_stack.push(CTType(TArray(Box::new(t)))),
-                        Some(x) => return Err(KindError(*op, KType, x)),
-                        None => return Err(TypeErrorEmptyCTStack(*op)),
+                        Some(x) => return Err(KindError(pos, *op, KType, x)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                     }
                 }
                 Op1All => {
@@ -200,13 +201,13 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                 Op1Emos => {
                     let mb_var = exist_stack.pop();
                     match mb_var {
-                        None => return Err(TypeErrorEmptyExistStack(*op)),
+                        None => return Err(TypeErrorEmptyExistStack(pos, *op)),
                         Some(id) => {
                             let mb_t = ct_stack.pop();
                             match mb_t {
                                 Some(CTType(t)) => ct_stack.push(CTType(TExists(id, Box::new(t)))),
-                                Some(x) => return Err(KindError(*op, KType, x)),
-                                None => return Err(TypeErrorEmptyCTStack(*op)),
+                                Some(x) => return Err(KindError(pos, *op, KType, x)),
+                                None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                             }
                         }
                     }
@@ -217,25 +218,25 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                         let mb_t = ct_stack.pop();
                         match mb_t {
                             Some(CTType(t)) => ts.push(t),
-                            Some(x) => return Err(KindError(*op, KType, x)),
-                            None => return Err(TypeErrorEmptyCTStack(*op)),
+                            Some(x) => return Err(KindError(pos, *op, KType, x)),
+                            None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                         }
                     }
                     let mb_c = ct_stack.pop();
                     match mb_c {
                         Some(CTCapability(c)) => ct_stack.push(CTType(TFunc(vec![], c, ts))),
-                        Some(x) => return Err(KindError(*op, KCapability, x)),
-                        None => return Err(TypeErrorEmptyCTStack(*op)),
+                        Some(x) => return Err(KindError(pos, *op, KCapability, x)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                     }
                 }
                 Op1CTGet(n) => {
                     let l = ct_stack.len();
                     if l == 0 {
-                        return Err(TypeErrorEmptyCTStack(*op));
+                        return Err(TypeErrorEmptyCTStack(pos, *op));
                     }
                     let i = usize::from(*n);
                     if l - 1 < i {
-                        return Err(TypeErrorParamOutOfRange(*op));
+                        return Err(TypeErrorParamOutOfRange(pos, *op));
                     }
                     ct_stack.push(ct_stack.get(l - i - 1).unwrap().clone());
                 }
@@ -249,19 +250,19 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                             TExists(_id, t) => {
                                 stack_type.push_back(*t) // simply remove the quantifier, unbinding its variable
                             }
-                            _ => return Err(TypeErrorExistentialExpected(t)),
+                            _ => return Err(TypeErrorExistentialExpected(pos, t)),
                         },
-                        None => return Err(TypeErrorEmptyStack(*op)),
+                        None => return Err(TypeErrorEmptyStack(pos, *op)),
                     }
                 }
                 Op1Get(n) => {
                     let l = stack_type.len();
                     if l == 0 {
-                        return Err(TypeErrorEmptyStack(*op));
+                        return Err(TypeErrorEmptyStack(pos, *op));
                     }
                     let i = usize::from(*n);
                     if l - 1 < i {
-                        return Err(TypeErrorParamOutOfRange(*op));
+                        return Err(TypeErrorParamOutOfRange(pos, *op));
                     }
                     stack_type.push_back(stack_type.get(l - 1 - i).unwrap().clone());
                     op2s.push(Op2Get(*n))
@@ -272,28 +273,27 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                     match mb_tpl {
                         Some(tpl) => match tpl.clone() {
                             TTuple(ts, r) => match ts.get(usize::from(*n)) {
-                                None => return Err(TypeErrorParamOutOfRange(*op)),
+                                None => return Err(TypeErrorParamOutOfRange(pos, *op)),
                                 Some(formal) => match mb_val {
-                                    None => return Err(TypeErrorEmptyStack(*op)),
+                                    None => return Err(TypeErrorEmptyStack(pos, *op)),
                                     Some(actual) => {
                                         if capabilities_needed
                                             .iter()
                                             .all(|c| !capable_read_write(&r, c, &capability_bounds))
                                         {
-                                            return Err(CapabilityError(*op, capabilities_needed));
+                                            return Err(CapabilityError(pos, *op, vec![ReadWrite(r)], capabilities_needed));
                                         }
                                         if formal == &actual {
                                             stack_type.push_back(tpl)
                                         } else {
-                                            println!("Type error! init is setting a tuple field of the wrong type!");
-                                            return Err(TypeErrorInit(formal.clone(), actual));
+                                            return Err(TypeErrorInit(pos, formal.clone(), actual));
                                         }
                                     }
                                 },
                             },
-                            _ => return Err(TypeErrorTupleExpected(*op, tpl)),
+                            _ => return Err(TypeErrorTupleExpected(pos, *op, tpl)),
                         },
-                        None => return Err(TypeErrorEmptyStack(*op)),
+                        None => return Err(TypeErrorEmptyStack(pos, *op)),
                     }
                     op2s.push(Op2Init(*n))
                 }
@@ -301,8 +301,8 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                     let mb_t = ct_stack.pop();
                     let t = match mb_t {
                         Some(CTType(t)) => t,
-                        Some(x) => return Err(KindError(*op, KType, x)),
-                        None => return Err(TypeErrorEmptyCTStack(*op)),
+                        Some(x) => return Err(KindError(pos, *op, KType, x)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                     };
                     let mb_rhandle = stack_type.pop_back();
                     match mb_rhandle {
@@ -312,15 +312,14 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                                     .iter()
                                     .all(|c| !capable_read_write(&r, c, &capability_bounds))
                                 {
-                                    return Err(CapabilityError(*op, capabilities_needed));
+                                    return Err(CapabilityError(pos, *op, vec![ReadWrite(r)], capabilities_needed));
                                 }
                             }
                             _ => {
-                                println!("Type error! malloc expects a region handle!");
-                                return Err(TypeErrorRegionHandleExpected(*op, t));
+                                return Err(TypeErrorRegionHandleExpected(pos, *op, t));
                             }
                         },
-                        None => return Err(TypeErrorEmptyStack(*op)),
+                        None => return Err(TypeErrorEmptyStack(pos, *op)),
                     }
                     stack_type.push_back(t);
                     op2s.push(Op2Malloc(4)) // TODO: use actual size in bytes of t
@@ -330,20 +329,20 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                     match mb_tpl {
                         Some(tpl) => match tpl {
                             TTuple(ts, r) => match ts.get(usize::from(*n)) {
-                                None => return Err(TypeErrorParamOutOfRange(*op)),
+                                None => return Err(TypeErrorParamOutOfRange(pos, *op)),
                                 Some(t) => {
                                     if capabilities_needed
                                         .iter()
                                         .all(|c| !capable_read_write(&r, c, &capability_bounds))
                                     {
-                                        return Err(CapabilityError(*op, capabilities_needed));
+                                        return Err(CapabilityError(pos, *op, vec![ReadWrite(r)], capabilities_needed));
                                     }
                                     stack_type.push_back(t.clone());
                                 }
                             },
-                            _ => return Err(TypeErrorTupleExpected(*op, tpl)),
+                            _ => return Err(TypeErrorTupleExpected(pos, *op, tpl)),
                         },
-                        None => return Err(TypeErrorEmptyStack(*op)),
+                        None => return Err(TypeErrorEmptyStack(pos, *op)),
                     }
                     op2s.push(Op2Proj(*n))
                 }
@@ -359,7 +358,7 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                                 for _ in 0..quantified.len() {
                                     match ct_stack.pop() {
                                         Some(ctval) => instantiation.push(ctval),
-                                        None => return Err(ErrorTodo("not enough arguments on the compile-time stack to call the function".to_owned()))
+                                        None => return Err(TypeErrorNotEnoughCompileTimeArgs(pos, quantified.len(), instantiation.len()))
                                     }
                                 }
                                 let caps_present = &capabilities_needed;
@@ -369,20 +368,16 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                                     match stack_type.pop_back() {
                                         Some(t) => arg_ts_present.push(t.clone()),
                                         None => {
-                                            return Err(ErrorTodo("not enough arguments on the stack to call the function!".to_owned()));
+                                            return Err(TypeErrorNotEnoughRuntimeArgs(pos, arg_ts_needed.len(), arg_ts_present.len()));
                                         }
                                     }
                                 }
                                 let (rgn_assignments, cap_assignments, type_assignments) =
-                                    instantiate(instantiation, quantified, &capability_bounds)?;
+                                    instantiate(pos, instantiation, quantified, &capability_bounds)?;
                                 let caps_needed_subbed = substitute_c(&caps_needed, &rgn_assignments, &cap_assignments);
                                 let caps_are_sufficient = caps_satisfy_caps(caps_present, &caps_needed_subbed, &capability_bounds);
                                 if !caps_are_sufficient {
-                                    dbg!(pretty::caps(&caps_present));
-                                    dbg!(pretty::caps(&caps_needed_subbed));
-                                    return Err(ErrorTodo(
-                                        "insufficient capabilities for call".to_owned(),
-                                    ));
+                                    return Err(CapabilityError(pos, *op, caps_needed_subbed.clone(), caps_present.clone()));
                                 }
                                 let types_match = arg_ts_present.iter().zip(arg_ts_needed.iter()).all(|(t1, t2)| {
                                     type_eq(
@@ -396,31 +391,25 @@ fn pass(stmt: &Stmt1) -> Result<(Stmt2, HashMap<i32, (StackType, CTStackType)>),
                                     )
                                 });
                                 if !types_match {
-                                    let arg_ts_present = arg_ts_present
-                                        .iter()
-                                        .map(|t| pretty::typ(&t))
-                                        .collect::<Vec<_>>();
-                                    dbg!(&arg_ts_present);
                                     let arg_ts_needed = arg_ts_needed
                                         .iter()
                                         .map(|t| substitute_t(t, &type_assignments, &rgn_assignments, &cap_assignments))
-                                        .map(|t| pretty::typ(&t))
                                         .collect::<Vec<_>>();
-                                    dbg!(&arg_ts_needed);
-                                    return Err(ErrorTodo("incorrect types for call".to_owned()));
+                                    return Err(TypeErrorCallArgTypesMismatch(pos, arg_ts_needed, arg_ts_present));
                                 }
                             }
-                            _ => return Err(TypeErrorFunctionExpected(*op, t)),
+                            _ => return Err(TypeErrorFunctionExpected(pos, *op, t)),
                         },
-                        None => return Err(TypeErrorEmptyStack(*op)),
+                        None => return Err(TypeErrorEmptyStack(pos, *op)),
                     }
                     op2s.push(Op2Call)
                 }
             },
         }
+        pos += 1;
     }
     if exist_stack.len() > 0 {
-        return Err(TypeErrorNonEmptyExistStack);
+        return Err(TypeErrorNonEmptyExistStack(*label));
     }
     let t = TFunc(kind_context, capabilities_needed, arg_types);
     Ok((Func2(*label, t, op2s), constraints))
@@ -442,6 +431,7 @@ fn capable_read_write(
 }
 
 fn instantiate(
+    pos: Pos,
     ct_args: Vec<CTStackVal>,
     quantified: KindContext,
     cap_bounds: &HashMap<Id, Vec<Capability>>,
@@ -458,9 +448,7 @@ fn instantiate(
     let mut rgn_assignments: HashMap<Id, Region> = HashMap::new();
     let mut type_assignments: HashMap<Id, Type> = HashMap::new();
     if ct_args.len() != quantified.len() {
-        return Err(ErrorTodo(
-            "not enough ct stack vals to instantiate call".to_owned(),
-        ));
+        panic!("instantiate given vectors of unequal length; this should have been handled by the caller")
     }
 
     for entry in quantified {
@@ -472,35 +460,27 @@ fn instantiate(
                     if caps_satisfy_caps(c, &bound, &cap_bounds) {
                         cap_assignments.insert(id, c.to_vec());
                     } else {
-                        return Err(ErrorTodo(
-                            "insufficient caps for capvar instantiation".to_owned(),
-                        ));
+                        return Err(CapabilityErrorBadInstantiation(pos, bound, c.to_vec()));
                     }
                 }
-                _ => {
-                    return Err(ErrorTodo(
-                        "kind error, instantiated a capvar with a noncap".to_owned(),
-                    ))
+                ctval => {
+                    return Err(KindErrorBadInstantiation(pos, KCapability, ctval.clone()))
                 }
             },
             KCEntryRegion(id, _) => match actual {
                 CTRegion(r) => {
                     rgn_assignments.insert(id, *r);
                 }
-                _ => {
-                    return Err(ErrorTodo(
-                        "kind error, instantiated a rgnvar with a nonrgn".to_owned(),
-                    ))
-                } // kind error- instantiated rgn var with a nonrgn
+                ctval => {
+                    return Err(KindErrorBadInstantiation(pos, KRegion, ctval.clone()))
+                }
             },
             KCEntryType(id, _) => match actual {
                 CTType(t) => {
                     type_assignments.insert(id, t.clone());
                 }
-                _ => {
-                    return Err(ErrorTodo(
-                        "kind error, instantiated a tvar with a nontype".to_owned(),
-                    ))
+                ctval => {
+                    return Err(KindErrorBadInstantiation(pos, KType, ctval.clone()))
                 } // kind error- instantiated type var with a nontype
             },
         }

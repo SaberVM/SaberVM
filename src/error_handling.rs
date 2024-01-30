@@ -8,89 +8,145 @@ pub fn handle(
 ) {
     match res {
         Err(e) => match e {
-            SyntaxErrorParamNeeded(op) => {
+            SyntaxErrorParamNeeded(pos, op) => {
                 println!(
-                    "Syntax error! The file ended while a parameter for {} was expected!",
-                    pretty::op_u8(op)
+                    "Syntax error! The file ended just as I was expecting the parameter for `{}`.\n[{}]",
+                    pretty::op_u8(op),
+                    pos
                 )
             }
-            SyntaxErrorUnknownOp(op) => {
-                println!("Syntax error! Unknown opcode {}!", op)
-            }
-            TypeErrorEmptyCTStack(op) => {
-                println!("Type error! {:#?} needs a value from the compile-time stack, but it was empty!", op)
-            }
-            KindErrorReq(val) => {
+            SyntaxErrorUnknownOp(pos, op) => {
                 println!(
-                    "Kind error! req needs a type or region, but it received a {}!",
-                    pretty::get_kind_str(&val)
-                )
-            }
-            KindError(op, expected, found) => {
-                println!(
-                    "Kind error! {:#?} needs a {}, but it received a {}!",
+                    "Syntax error! I don't know of an opcode with the code `{}`.\n[{}]", 
                     op,
+                    pos
+                )
+            }
+            TypeErrorEmptyCTStack(pos, op) => {
+                println!(
+                    "Type error! `{}` needs a value from the compile-time stack, but at this point the compile-time stack has nothing in it.\n[{}]", 
+                    pretty::op1(op),
+                    pos
+                )
+            }
+            KindErrorReq(pos, val) => {
+                println!(
+                    "Kind error! `req` needs a type or region, but it is receiving a `{}`.\n[{}]",
+                    pretty::get_kind_str(&val),
+                    pos
+                )
+            }
+            KindError(pos, op, expected, found) => {
+                println!(
+                    "Kind error! `{}` needs a `{}`, but it is receiving a `{}`.\n[{}]",
+                    pretty::op1(op),
                     pretty::kind(expected),
-                    pretty::get_kind_str(&found)
+                    pretty::get_kind_str(&found),
+                    pos
                 )
             }
-            TypeErrorEmptyExistStack(op) => {
-                println!("Type error! {:#?} needs a variable from the existential stack, but it was empty!", op)
-            }
-            TypeErrorParamOutOfRange(op) => {
-                println!("Type error! {:#?} has a parameter that's too large for what it's trying to index into!", op)
-            }
-            TypeErrorExistentialExpected(found) => {
+            TypeErrorEmptyExistStack(pos, op) => {
                 println!(
-                    "Type error! Expected an existential type, but found {}",
-                    pretty::typ(&found)
+                    "Type error! `{}` is trying to use the existential stack, but at this point the existential stack has nothing in it.\n[{}]", 
+                    pretty::op1(op),
+                    pos
                 )
             }
-            TypeErrorEmptyStack(op) => {
+            TypeErrorParamOutOfRange(pos, op) => {
                 println!(
-                    "Type error! {:#?} needs a something from the stack, but it's empty!",
-                    op
+                    "Type error! `{}` is trying to index something, but the index is higher than the number of things in that something.\n[{}]", 
+                    pretty::op1(op),
+                    pos
                 )
             }
-            CapabilityError(op, cs) => {
+            TypeErrorExistentialExpected(pos, found) => {
                 println!(
-                    "Capability error! {:#?} doesn't have enough permission, only {}!",
-                    op,
-                    pretty::caps(&cs)
+                    "Type error! I'm trying to unpack `{}`, which is not an existential type (and therefore can't be unpacked).\n[{}]",
+                    pretty::typ(&found),
+                    pos
                 )
             }
-            TypeErrorInit(expected, found) => {
+            TypeErrorEmptyStack(pos, op) => {
                 println!(
-                    "Type error! init is setting a field of the wrong type! Expected {}, found {}",
+                    "Type error! `{}` needs something from the stack, but the stack at this point will be empty.\n[{}]",
+                    pretty::op1(op),
+                    pos
+                )
+            }
+            CapabilityError(pos, op, needed, present) => {
+                println!(
+                    "Capability error! `{}` doesn't have enough capabilities! It needs `{}` but has `{}`.\n[{}]",
+                    pretty::op1(op),
+                    pretty::caps(&needed),
+                    pretty::caps(&present),
+                    pos
+                )
+            }
+            TypeErrorInit(pos, expected, found) => {
+                println!(
+                    "Type error! `init` is setting a field of the wrong type. It's trying to set a field of type `{}`, but the field it's setting actually has type `{}`.\n[{}]",
                     pretty::typ(&expected),
-                    pretty::typ(&found)
+                    pretty::typ(&found),
+                    pos
                 )
             }
-            TypeErrorTupleExpected(op, t) => {
+            TypeErrorTupleExpected(pos, op, t) => {
                 println!(
-                    "Type error! {:#?} expected a tuple type, but found a {} instead!",
-                    op,
-                    pretty::typ(&t)
+                    "Type error! `{}` expects a tuple type, but it will receive a `{}` instead.\n[{}]",
+                    pretty::op1(op),
+                    pretty::typ(&t),
+                    pos
                 )
             }
-            TypeErrorRegionHandleExpected(op, t) => {
+            TypeErrorRegionHandleExpected(pos, op, t) => {
                 println!(
-                    "Type error! {:#?} expected a region handle, but found a {} instead!",
-                    op,
-                    pretty::typ(&t)
+                    "Type error! `{}` expects a region handle, but it will receive a `{}` instead.\n[{}]",
+                    pretty::op1(op),
+                    pretty::typ(&t),
+                    pos
                 )
             }
-            TypeErrorFunctionExpected(op, t) => {
+            TypeErrorFunctionExpected(pos, op, t) => {
                 println!(
-                    "Type error! {:#?} expected a function, but found a {} instead!",
-                    op,
-                    pretty::typ(&t)
+                    "Type error! `{}` expected a function, but it will receive a `{}` instead.\n[{}]",
+                    pretty::op1(op),
+                    pretty::typ(&t),
+                    pos
                 )
             }
-            TypeErrorNonEmptyExistStack => {
-                println!("Type error! At the end of the function there are still unbound existential variables!")
+            TypeErrorNonEmptyExistStack(pos) => {
+                println!("Type error! At the end of the function there are still unbound existential variables.\n[{}]", pos)
             }
-            ErrorTodo(s) => println!("{}", s)
+            TypeErrorNotEnoughCompileTimeArgs(pos, expected, found) => {
+                println!("Type error! The function expects {} compile-time arguments, but only receives {}.\n[{}]", expected, found, pos)
+            }
+            TypeErrorNotEnoughRuntimeArgs(pos, expected, found) => {
+                println!("Type error! The function expects {} arguments, but will only receive {}.\n[{}]", expected, found, pos)
+            }
+            TypeErrorCallArgTypesMismatch(pos, expected, found) => {
+                println!(
+                    "Type error! A function was called with the wrong types of arguments. It expects `{}`, but it's receiving `{}` instead.\n[{}]",
+                    pretty::types(&expected),
+                    pretty::types(&found),
+                    pos
+                )
+            }
+            CapabilityErrorBadInstantiation(pos, bound, present) => {
+                println!(
+                    "Capability error! A capability parameter is being instantiated with a capability that doesn't meet its bound requirement. The bound is `{}` it's instantiated with `{}`.\n[{}]",
+                    pretty::caps(&bound),
+                    pretty::caps(&present),
+                    pos
+                )
+            }
+            KindErrorBadInstantiation(pos, kind, instantiation) => {
+                println!(
+                    "Kind error! A `{}` variable is being instantiated with a `{}`.\n[{}]",
+                    pretty::kind(kind),
+                    pretty::get_kind_str(&instantiation),
+                    pos
+                )
+            }
         },
         Ok(()) => (),
     }
