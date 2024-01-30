@@ -10,11 +10,8 @@ use crate::header::OpCode2;
 use crate::header::OpCode2::*;
 use crate::header::Region;
 use crate::header::Region::*;
+use crate::header::Type;
 use crate::header::Type::*;
-use crate::header::TypeListPool;
-use crate::header::TypeListRef;
-use crate::header::TypePool;
-use crate::header::TypeRef;
 use crate::header::get_kind;
 
 pub fn op2(op: &OpCode2) -> String {
@@ -37,7 +34,7 @@ pub fn region(r: Region) -> String {
 pub fn kind_context(kinds: &KindContext) -> String {
     kinds.iter().map(|entry| 
         match entry {
-            KCEntryCapability(id, bound) => {
+            KCEntryCapability(id, bound, _) => {
                 let prefix = "c".to_owned() + &id.1.to_string();
                 if bound.len() != 0 {
                     return prefix + "≤" + &caps(bound)
@@ -45,8 +42,8 @@ pub fn kind_context(kinds: &KindContext) -> String {
                     return prefix 
                 }
             }
-            KCEntryRegion(id) => "r".to_owned() + &id.1.to_string(),
-            KCEntryType(id) => "t".to_owned() + &id.1.to_string()
+            KCEntryRegion(id, _) => "r".to_owned() + &id.1.to_string(),
+            KCEntryType(id, _) => "t".to_owned() + &id.1.to_string()
         }
     ).collect::<Vec<_>>().join(",")
 }
@@ -64,14 +61,11 @@ pub fn cap(c: Capability) -> String {
 }
 
 pub fn types(
-    ts: &TypeListRef,
-    type_pool: &TypePool,
-    tl_pool: &TypeListPool,
+    ts: &Vec<Type>,
 ) -> String {
-    tl_pool
-        .get(ts)
+    ts
         .iter()
-        .map(|tr| typ(tr, type_pool, tl_pool))
+        .map(|t| typ(t))
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -85,25 +79,22 @@ fn var(id: &Id, k: &Kind) -> String {
 }
 
 pub fn typ(
-    tr: &TypeRef,
-    type_pool: &TypePool,
-    tl_pool: &TypeListPool,
+    t: &Type,
 ) -> String {
-    let t = type_pool.get(tr);
     match t {
         Ti32 => "i32".to_string(),
         THandle(r) => "handle(".to_owned() + &region(*r) + ")",
-        TMutable(tr) => "mut ".to_owned() + &typ(tr, type_pool, tl_pool),
+        TMutable(t) => "mut ".to_owned() + &typ(t),
         TTuple(ts, r) => {
-            "(".to_owned() + &types(ts, type_pool, tl_pool) + ")@" + &region(*r)
+            "(".to_owned() + &types(ts) + ")@" + &region(*r)
         }
-        TArray(tr) => "[]".to_owned() + &typ(tr, type_pool, tl_pool),
+        TArray(t) => "[]".to_owned() + &typ(t),
         TVar(id) => "t".to_owned() + &id.1.to_string(),
-        TExists(id, tr) => {
+        TExists(id, t) => {
             "Exists t".to_owned()
                 + &id.1.to_string()
                 + ". "
-                + &typ(tr, type_pool, tl_pool)
+                + &typ(t)
         }
         TFunc(kinds, c, ts) => {
             let quantification = 
@@ -117,7 +108,7 @@ pub fn typ(
             let body = "[".to_owned()
                 + &caps(c)
                 + "]("
-                + &types(ts, type_pool, tl_pool)
+                + &types(ts)
                 + ")->0";
             quantification.to_owned() + &body
         }

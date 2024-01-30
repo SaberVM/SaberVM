@@ -1,14 +1,10 @@
 
 use crate::header::Error;
 use crate::header::Error::*;
-use crate::header::TypeListPool;
-use crate::header::TypePool;
 use crate::pretty;
 
 pub fn handle(
     res: Result<(), Error>,
-    type_pool: &TypePool,
-    tl_pool: &TypeListPool,
 ) {
     match res {
         Err(e) => match e {
@@ -47,7 +43,7 @@ pub fn handle(
             TypeErrorExistentialExpected(found) => {
                 println!(
                     "Type error! Expected an existential type, but found {}",
-                    pretty::typ(&found, &type_pool, &tl_pool)
+                    pretty::typ(&found)
                 )
             }
             TypeErrorEmptyStack(op) => {
@@ -66,35 +62,35 @@ pub fn handle(
             TypeErrorInit(expected, found) => {
                 println!(
                     "Type error! init is setting a field of the wrong type! Expected {}, found {}",
-                    pretty::typ(&expected, &type_pool, &tl_pool),
-                    pretty::typ(&found, &type_pool, &tl_pool)
+                    pretty::typ(&expected),
+                    pretty::typ(&found)
                 )
             }
-            TypeErrorTupleExpected(op, tr) => {
+            TypeErrorTupleExpected(op, t) => {
                 println!(
                     "Type error! {:#?} expected a tuple type, but found a {} instead!",
                     op,
-                    pretty::typ(&tr, &type_pool, &tl_pool)
+                    pretty::typ(&t)
                 )
             }
-            TypeErrorRegionHandleExpected(op, tr) => {
+            TypeErrorRegionHandleExpected(op, t) => {
                 println!(
                     "Type error! {:#?} expected a region handle, but found a {} instead!",
                     op,
-                    pretty::typ(&tr, &type_pool, &tl_pool)
+                    pretty::typ(&t)
                 )
             }
-            TypeErrorFunctionExpected(op, tr) => {
+            TypeErrorFunctionExpected(op, t) => {
                 println!(
                     "Type error! {:#?} expected a function, but found a {} instead!",
                     op,
-                    pretty::typ(&tr, &type_pool, &tl_pool)
+                    pretty::typ(&t)
                 )
             }
             TypeErrorNonEmptyExistStack => {
                 println!("Type error! At the end of the function there are still unbound existential variables!")
             }
-            ErrorTodo => panic!()
+            ErrorTodo(s) => println!("{}", s)
         },
         Ok(()) => (),
     }

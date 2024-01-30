@@ -45,7 +45,7 @@ pub enum Stmt1 {
 
 #[derive(Debug)]
 pub enum Stmt2 {
-    Func2(i32, TypeRef, Vec<OpCode2>),
+    Func2(i32, Type, Vec<OpCode2>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -73,9 +73,9 @@ pub enum Capability {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KindContextEntry {
-    KCEntryCapability(Id, Vec<Capability>),
-    KCEntryType(Id),
-    KCEntryRegion(Id),
+    KCEntryCapability(Id, Vec<Capability>, Capability),
+    KCEntryType(Id, Type),
+    KCEntryRegion(Id, Region),
 }
 
 pub type KindContext = Vec<KindContextEntry>;
@@ -84,54 +84,20 @@ pub type KindContext = Vec<KindContextEntry>;
 pub enum Type {
     Ti32,
     THandle(Region),
-    TMutable(TypeRef),
-    TTuple(TypeListRef, Region),
-    TArray(TypeRef),
+    TMutable(Box<Type>),
+    TTuple(Vec<Type>, Region),
+    TArray(Box<Type>),
     TVar(Id),
-    TFunc(KindContext, Vec<Capability>, TypeListRef),
-    TExists(Id, TypeRef),
+    TFunc(KindContext, Vec<Capability>, Vec<Type>),
+    TExists(Id, Box<Type>),
     TGuess(i32),
-}
-
-pub struct TypePool(pub Vec<Type>);
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TypeRef(u32);
-impl TypePool {
-    pub fn get(&self, r: &TypeRef) -> &Type {
-        let TypePool(v) = self;
-        let TypeRef(i) = r;
-        &v[*i as usize]
-    }
-    pub fn add(&mut self, t: Type) -> TypeRef {
-        let TypePool(v) = self;
-        let idx = v.len();
-        v.push(t);
-        TypeRef(idx.try_into().expect("too many types in the pool"))
-    }
-}
-
-pub struct TypeListPool(pub Vec<Vec<TypeRef>>);
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TypeListRef(u32);
-impl TypeListPool {
-    pub fn get(&self, r: &TypeListRef) -> &Vec<TypeRef> {
-        let TypeListPool(v) = self;
-        let TypeListRef(i) = r;
-        &v[*i as usize]
-    }
-    pub fn add(&mut self, ts: Vec<TypeRef>) -> TypeListRef {
-        let TypeListPool(v) = self;
-        let idx = v.len();
-        v.push(ts);
-        TypeListRef(idx.try_into().expect("too many type lists in the pool"))
-    }
 }
 
 #[derive(Clone, Debug)]
 pub enum CTStackVal {
     CTRegion(Region),
     CTCapability(Vec<Capability>),
-    CTType(TypeRef),
+    CTType(Type),
 }
 
 pub fn get_kind(ctval: &CTStackVal) -> Kind {
@@ -151,13 +117,13 @@ pub enum Error {
     KindError(OpCode1, Kind, CTStackVal),
     TypeErrorEmptyExistStack(OpCode1),
     TypeErrorParamOutOfRange(OpCode1),
-    TypeErrorExistentialExpected(TypeRef),
+    TypeErrorExistentialExpected(Type),
     TypeErrorEmptyStack(OpCode1),
     CapabilityError(OpCode1, Vec<Capability>),
-    TypeErrorInit(TypeRef, TypeRef),
-    TypeErrorTupleExpected(OpCode1, TypeRef),
-    TypeErrorRegionHandleExpected(OpCode1, TypeRef),
-    TypeErrorFunctionExpected(OpCode1, TypeRef),
+    TypeErrorInit(Type, Type),
+    TypeErrorTupleExpected(OpCode1, Type),
+    TypeErrorRegionHandleExpected(OpCode1, Type),
+    TypeErrorFunctionExpected(OpCode1, Type),
     TypeErrorNonEmptyExistStack,
-    ErrorTodo
+    ErrorTodo(String)
 }
