@@ -1,135 +1,170 @@
+/// The input type for SaberVM.
+pub type ByteStream = Vec<u8>; // not streamed currently
 
+/// The output type for the parser.
+pub type ParsedStmts = Vec<UnverifiedStmt>;
+
+/// The type of parameters of parameterized opcodes (like `proj` or `get`).
+pub type OpParam = u8;
+
+/// The type of unverified ops.
+/// This includes all the static analysis ops, which disappear after verification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OpCode1 {
-    Op1Req,     // 0x00
-    Op1Region,  // 0x01
-    Op1Heap,    // 0x02
-    Op1Cap,     // 0x03
-    Op1CapLE,   // 0x04
-    Op1Own,     // 0x05
-    Op1Read,    // 0x06
-    Op1Both,    // 0x07
-    Op1Handle,  // 0x08
-    Op1i32,     // 0x09
-    Op1End,     // 0x0A
-    Op1Mut,     // 0x0B
-    Op1Tuple(u8), // 0x0C
-    Op1Arr,     // 0x0D
-    Op1All,     // 0x0E
-    Op1Some,    // 0x0F
-    Op1Emos,    // 0x10
-    Op1Func(u8),  // 0x11
-    Op1CTGet(u8), // 0x12
-    Op1CTPop,   // 0x13
-    Op1Unpack,  // 0x14
-    Op1Get(u8),   // 0x15
-    Op1Init(u8),  // 0x16
-    Op1Malloc,  // 0x17
-    Op1Proj(u8),  // 0x18
-    Op1Call,    // 0x19
+pub enum UnverifiedOpcode {
+    ReqOp,            // 0x00
+    RegionOp,         // 0x01
+    HeapOp,           // 0x02
+    CapOp,            // 0x03
+    CapLEOp,          // 0x04
+    UniqueOp,         // 0x05
+    RWOp,             // 0x06
+    BothOp,           // 0x07
+    HandleOp,         // 0x08
+    I32Op,            // 0x09
+    EndFunctionOp,    // 0x0A
+    MutOp,            // 0x0B
+    TupleOp(OpParam), // 0x0C
+    ArrOp,            // 0x0D
+    AllOp,            // 0x0E
+    SomeOp,           // 0x0F
+    EmosOp,           // 0x10
+    FuncOp(OpParam),  // 0x11
+    CTGetOp(OpParam), // 0x12
+    CTPopOp,          // 0x13
+    UnpackOp,         // 0x14
+    GetOp(OpParam),   // 0x15
+    InitOp(OpParam),  // 0x16
+    MallocOp,         // 0x17
+    ProjOp(OpParam),  // 0x18
+    CallOp,           // 0x19
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum OpCode2 {
-    Op2Get(u8),
-    Op2Init(u8),
-    Op2Malloc(u8),
-    Op2Proj(u8),
-    Op2Call,
+pub enum VerifiedOpcode {
+    GetOp(OpParam),
+    InitOp(OpParam),
+    MallocOp(OpParam),
+    ProjOp(OpParam),
+    CallOp,
 }
 
+/// Statements produced by the parsing pass.
+/// Next they would go through the verification pass.
 #[derive(Debug)]
-pub enum Stmt1 {
-    Func1(Pos, Vec<OpCode1>),
+pub enum UnverifiedStmt {
+    Func(Pos, Vec<UnverifiedOpcode>),
 }
 
+/// Statements produced by the verification pass.
 #[derive(Debug)]
-pub enum Stmt2 {
-    Func2(Pos, Type, Vec<OpCode2>),
+pub enum VerifiedStmt {
+    Func(Pos, Type, Vec<VerifiedOpcode>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Kind {
-    KRegion,
-    KType,
-    KCapability,
+    RegionKind,
+    TypeKind,
+    CapabilityKind,
 }
 
+/// The type for identifiers.
+/// As SaberVM is stack-based, this really just means compile-time stuff, like type variables.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Id(pub Pos, pub i32);
+pub struct Id(pub Pos, pub u32);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Region {
-    RegionVar(Id),
-    Heap,
+    VarRgn(Id),
+    HeapRgn,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Capability {
-    Unique(Region),
-    ReadWrite(Region),
-    CapVar(Id),
+    UniqueCap(Region),
+    ReadWriteCap(Region),
+    VarCap(Id),
 }
 
+/// The type for things that can be in the kind context (\Delta, in the Capability Calculus paper) of a function.
+/// Capability variables get bounds recorded here.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KindContextEntry {
-    KCEntryCapability(Id, Vec<Capability>, Capability),
-    KCEntryType(Id, Type),
-    KCEntryRegion(Id, Region),
+    CapabilityKindContextEntry(Id, Vec<Capability>),
+    TypeKindContextEntry(Id),
+    RegionKindContextEntry(Id),
 }
 
+/// The kind assignments for polymorphism variables for a function.
+/// Capability variables also have bounds recorded here.
+/// This is \Delta in the Capability Calculus paper.
 pub type KindContext = Vec<KindContextEntry>;
+
+pub type Label = u32;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Type {
-    Ti32,
-    THandle(Region),
-    TMutable(Box<Type>),
-    TTuple(Vec<Type>, Region),
-    TArray(Box<Type>),
-    TVar(Id),
-    TFunc(KindContext, Vec<Capability>, Vec<Type>),
-    TExists(Id, Box<Type>),
-    TGuess(i32),
+    I32Type,
+    HandleType(Region),
+    MutableType(Box<Type>),
+    TupleType(Vec<Type>, Region),
+    ArrayType(Box<Type>),
+    VarType(Id),
+    FuncType(KindContext, Vec<Capability>, Vec<Type>),
+    ExistsType(Id, Box<Type>),
+    GuessType(Label),
 }
 
+/// The type of things on the compile-time stack, which can come in any kind.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CTStackVal {
-    CTRegion(Region),
-    CTCapability(Vec<Capability>),
-    CTType(Type),
+    RegionCTStackVal(Region),
+    CapCTStackVal(Vec<Capability>),
+    TypeCTStackVal(Type),
 }
 
+/// Get the kind of a compile-time stack value.
 pub fn get_kind(ctval: &CTStackVal) -> Kind {
     match ctval {
-        CTStackVal::CTCapability(_) => Kind::KCapability,
-        CTStackVal::CTRegion(_) => Kind::KRegion,
-        CTStackVal::CTType(_) => Kind::KType
+        CTStackVal::CapCTStackVal(_) => Kind::CapabilityKind,
+        CTStackVal::RegionCTStackVal(_) => Kind::RegionKind,
+        CTStackVal::TypeCTStackVal(_) => Kind::TypeKind,
     }
 }
 
 pub type Pos = u32;
 
+/// a do-nothing type wrapper for annotating error arguments
+pub type Expected<A> = A;
+/// a do-nothign type wrapper for annotating error arguments
+pub type Found<A> = A;
+
+/// The type for user-facing errors (as opposed to internal SaberVM errors, which are panics).
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     SyntaxErrorParamNeeded(Pos, u8),
     SyntaxErrorUnknownOp(Pos, u8),
-    TypeErrorEmptyCTStack(Pos, OpCode1),
+    TypeErrorEmptyCTStack(Pos, UnverifiedOpcode),
     KindErrorReq(Pos, CTStackVal),
-    KindError(Pos, OpCode1, Kind, CTStackVal),
-    TypeErrorEmptyExistStack(Pos, OpCode1),
-    TypeErrorParamOutOfRange(Pos, OpCode1),
+    KindError(Pos, UnverifiedOpcode, Kind, CTStackVal),
+    TypeErrorEmptyExistStack(Pos, UnverifiedOpcode),
+    TypeErrorParamOutOfRange(Pos, UnverifiedOpcode),
     TypeErrorExistentialExpected(Pos, Type),
-    TypeErrorEmptyStack(Pos, OpCode1),
-    CapabilityError(Pos, OpCode1, Vec<Capability>, Vec<Capability>), // expected, found
-    TypeErrorInit(Pos, Type, Type), // expected, found
-    TypeErrorTupleExpected(Pos, OpCode1, Type),
-    TypeErrorRegionHandleExpected(Pos, OpCode1, Type),
-    TypeErrorFunctionExpected(Pos, OpCode1, Type),
+    TypeErrorEmptyStack(Pos, UnverifiedOpcode),
+    CapabilityError(
+        Pos,
+        UnverifiedOpcode,
+        Expected<Vec<Capability>>,
+        Found<Vec<Capability>>,
+    ),
+    TypeErrorInit(Pos, Expected<Type>, Found<Type>),
+    TypeErrorTupleExpected(Pos, UnverifiedOpcode, Type),
+    TypeErrorRegionHandleExpected(Pos, UnverifiedOpcode, Type),
+    TypeErrorFunctionExpected(Pos, UnverifiedOpcode, Type),
     TypeErrorNonEmptyExistStack(Pos),
-    TypeErrorNotEnoughCompileTimeArgs(Pos, usize, usize), // expected, found
-    TypeErrorNotEnoughRuntimeArgs(Pos, usize, usize), // expected, found
-    TypeErrorCallArgTypesMismatch(Pos, Vec<Type>, Vec<Type>), // expected, found
-    CapabilityErrorBadInstantiation(Pos, Vec<Capability>, Vec<Capability>), // expected, found
+    TypeErrorNotEnoughCompileTimeArgs(Pos, Expected<usize>, Found<usize>),
+    TypeErrorNotEnoughRuntimeArgs(Pos, Expected<usize>, Found<usize>),
+    TypeErrorCallArgTypesMismatch(Pos, Expected<Vec<Type>>, Found<Vec<Type>>),
+    CapabilityErrorBadInstantiation(Pos, Expected<Vec<Capability>>, Found<Vec<Capability>>),
     KindErrorBadInstantiation(Pos, Kind, CTStackVal),
 }

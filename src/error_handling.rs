@@ -1,11 +1,9 @@
-
 use crate::header::Error;
 use crate::header::Error::*;
 use crate::pretty;
 
-pub fn handle(
-    res: Result<(), Error>,
-) {
+/// Print a helpful error message for the given error, if there is one.
+pub fn handle(res: Result<(), Error>) {
     match res {
         Err(e) => match e {
             SyntaxErrorParamNeeded(pos, op) => {
@@ -17,15 +15,14 @@ pub fn handle(
             }
             SyntaxErrorUnknownOp(pos, op) => {
                 println!(
-                    "Syntax error! I don't know of an opcode with the code `{}`.\n[{}]", 
-                    op,
-                    pos
+                    "Syntax error! I don't know of an opcode with the code `{}`.\n[{}]",
+                    op, pos
                 )
             }
             TypeErrorEmptyCTStack(pos, op) => {
                 println!(
                     "Type error! `{}` needs a value from the compile-time stack, but at this point the compile-time stack has nothing in it.\n[{}]", 
-                    pretty::op1(op),
+                    pretty::unverified_op(op),
                     pos
                 )
             }
@@ -39,7 +36,7 @@ pub fn handle(
             KindError(pos, op, expected, found) => {
                 println!(
                     "Kind error! `{}` needs a `{}`, but it is receiving a `{}`.\n[{}]",
-                    pretty::op1(op),
+                    pretty::unverified_op(op),
                     pretty::kind(expected),
                     pretty::get_kind_str(&found),
                     pos
@@ -48,14 +45,14 @@ pub fn handle(
             TypeErrorEmptyExistStack(pos, op) => {
                 println!(
                     "Type error! `{}` is trying to use the existential stack, but at this point the existential stack has nothing in it.\n[{}]", 
-                    pretty::op1(op),
+                    pretty::unverified_op(op),
                     pos
                 )
             }
             TypeErrorParamOutOfRange(pos, op) => {
                 println!(
                     "Type error! `{}` is trying to index something, but the index is higher than the number of things in that something.\n[{}]", 
-                    pretty::op1(op),
+                    pretty::unverified_op(op),
                     pos
                 )
             }
@@ -69,14 +66,14 @@ pub fn handle(
             TypeErrorEmptyStack(pos, op) => {
                 println!(
                     "Type error! `{}` needs something from the stack, but the stack at this point will be empty.\n[{}]",
-                    pretty::op1(op),
+                    pretty::unverified_op(op),
                     pos
                 )
             }
             CapabilityError(pos, op, needed, present) => {
                 println!(
                     "Capability error! `{}` doesn't have enough capabilities! It needs `{}` but has `{}`.\n[{}]",
-                    pretty::op1(op),
+                    pretty::unverified_op(op),
                     pretty::caps(&needed),
                     pretty::caps(&present),
                     pos
@@ -93,7 +90,7 @@ pub fn handle(
             TypeErrorTupleExpected(pos, op, t) => {
                 println!(
                     "Type error! `{}` expects a tuple type, but it will receive a `{}` instead.\n[{}]",
-                    pretty::op1(op),
+                    pretty::unverified_op(op),
                     pretty::typ(&t),
                     pos
                 )
@@ -101,7 +98,7 @@ pub fn handle(
             TypeErrorRegionHandleExpected(pos, op, t) => {
                 println!(
                     "Type error! `{}` expects a region handle, but it will receive a `{}` instead.\n[{}]",
-                    pretty::op1(op),
+                    pretty::unverified_op(op),
                     pretty::typ(&t),
                     pos
                 )
@@ -109,7 +106,7 @@ pub fn handle(
             TypeErrorFunctionExpected(pos, op, t) => {
                 println!(
                     "Type error! `{}` expected a function, but it will receive a `{}` instead.\n[{}]",
-                    pretty::op1(op),
+                    pretty::unverified_op(op),
                     pretty::typ(&t),
                     pos
                 )

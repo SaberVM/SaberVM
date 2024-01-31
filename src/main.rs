@@ -6,28 +6,31 @@ mod verify;
 
 use std::fs;
 
+use crate::header::ByteStream;
 use crate::header::Error;
-use crate::header::Stmt2::*;
+use crate::header::VerifiedStmt::*;
 
-fn go(
-    code: &Vec<u8>,
-) -> Result<(), Error> {
-    let prog = parse::go(code)?;
+fn go(bytes: &ByteStream) -> Result<(), Error> {
+    let unverified_stmts = parse::go(bytes)?;
 
-    let stmts = verify::go(prog)?;
-    let p = &stmts[0];
-    let Func2(_, t, ops) = p;
-    dbg!(pretty::typ(&t));
+    let verified_stmts = verify::go(unverified_stmts)?;
+
+    // the following is just for debugging
+    let first_func = &verified_stmts[0];
+    let Func(_, func_type, ops) = first_func;
+    dbg!(pretty::typ(&func_type));
     for op in ops {
-        println!("{}", pretty::op2(&op))
+        println!("{}", pretty::verified_op(&op))
     }
+
     Ok(())
 }
 
 fn main() {
-    let code = fs::read("bin.svm").unwrap();
+    // get the bytes from the local bin.svm file (later this will be a CLI arg of course)
+    let bytes = fs::read("bin.svm").unwrap();
 
-    let res = go(&code);
+    let mb_error = go(&bytes);
 
-    error_handling::handle(res);
+    error_handling::handle(mb_error);
 }

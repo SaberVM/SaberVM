@@ -1,126 +1,121 @@
+use crate::header::get_kind;
 use crate::header::CTStackVal;
 use crate::header::Capability;
 use crate::header::Capability::*;
 use crate::header::Kind;
 use crate::header::KindContext;
 use crate::header::KindContextEntry::*;
-use crate::header::OpCode1;
-use crate::header::OpCode1::*;
-use crate::header::OpCode2;
-use crate::header::OpCode2::*;
 use crate::header::Region;
 use crate::header::Region::*;
 use crate::header::Type;
 use crate::header::Type::*;
-use crate::header::get_kind;
+use crate::header::UnverifiedOpcode;
+use crate::header::UnverifiedOpcode::*;
+use crate::header::VerifiedOpcode;
 
-pub fn op2(op: &OpCode2) -> String {
+/// Get a pretty string representation of a verified opcode.
+pub fn verified_op(op: &VerifiedOpcode) -> String {
     match op {
-        Op2Get(n) => "get ".to_owned() + &n.to_string(),
-        Op2Init(n) => "init ".to_owned() + &n.to_string(),
-        Op2Malloc(_n) => "malloc".to_owned(),
-        Op2Proj(n) => "proj ".to_owned() + &n.to_string(),
-        Op2Call => "call".to_owned(),
+        VerifiedOpcode::GetOp(n) => "get ".to_owned() + &n.to_string(),
+        VerifiedOpcode::InitOp(n) => "init ".to_owned() + &n.to_string(),
+        VerifiedOpcode::MallocOp(_n) => "malloc".to_owned(),
+        VerifiedOpcode::ProjOp(n) => "proj ".to_owned() + &n.to_string(),
+        VerifiedOpcode::CallOp => "call".to_owned(),
     }
 }
 
+/// Get a pretty string representation of a compile-time region value.
 pub fn region(r: Region) -> String {
     match r {
-        Heap => "Heap".to_string(),
-        RegionVar(id) => "r".to_owned() + &id.1.to_string(),
+        Region::HeapRgn => "Heap".to_string(),
+        VarRgn(id) => "r".to_owned() + &id.1.to_string(),
     }
 }
 
+/// Get a pretty string representation of a kind context
+/// (the kind and bound assignments of polymorphism variables).
 pub fn kind_context(kinds: &KindContext) -> String {
-    kinds.iter().map(|entry| 
-        match entry {
-            KCEntryCapability(id, bound, _) => {
+    kinds
+        .iter()
+        .map(|entry| match entry {
+            CapabilityKindContextEntry(id, bound) => {
                 let prefix = "c".to_owned() + &id.1.to_string();
                 if bound.len() != 0 {
-                    return prefix + "≤" + &caps(bound)
-                } else { 
-                    return prefix 
+                    return prefix + "≤" + &caps(bound);
+                } else {
+                    return prefix;
                 }
             }
-            KCEntryRegion(id, _) => "r".to_owned() + &id.1.to_string(),
-            KCEntryType(id, _) => "t".to_owned() + &id.1.to_string()
-        }
-    ).collect::<Vec<_>>().join(",")
+            RegionKindContextEntry(id) => "r".to_owned() + &id.1.to_string(),
+            TypeKindContextEntry(id) => "t".to_owned() + &id.1.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
+/// Get a pretty string representation of a capability set.
 pub fn caps(cs: &Vec<Capability>) -> String {
-    "{".to_owned() + &cs.iter().map(|c| cap(c.clone())).collect::<Vec<_>>().join(",") + "}"
+    "{".to_owned()
+        + &cs
+            .iter()
+            .map(|c| cap(c.clone()))
+            .collect::<Vec<_>>()
+            .join(",")
+        + "}"
 }
 
+/// Get a pretty string representation of a capability.
 pub fn cap(c: Capability) -> String {
     match c {
-        CapVar(id) => "c".to_owned() + &id.1.to_string(),
-        Unique(r) => "1".to_owned() + &region(r),
-        ReadWrite(r) => "+".to_owned() + &region(r),
+        VarCap(id) => "c".to_owned() + &id.1.to_string(),
+        UniqueCap(r) => "1".to_owned() + &region(r),
+        ReadWriteCap(r) => "+".to_owned() + &region(r),
     }
 }
 
-pub fn types(
-    ts: &Vec<Type>,
-) -> String {
-    ts
-        .iter()
-        .map(|t| typ(t))
-        .collect::<Vec<_>>()
-        .join(", ")
+/// Get a pretty string representation of a list of types.
+pub fn types(ts: &Vec<Type>) -> String {
+    ts.iter().map(|t| typ(t)).collect::<Vec<_>>().join(", ")
 }
 
+// /// Get a pretty string representation of an identifier of a given kind.
 // fn var(id: &Id, k: &Kind) -> String {
 //     match k {
-//         KRegion => "r".to_owned() + &id.1.to_string(),
-//         KType => "t".to_owned() + &id.1.to_string(),
-//         KCapability => "c".to_owned() + &id.1.to_string(),
+//         RegionKind => "r".to_owned() + &id.1.to_string(),
+//         TypeKind => "t".to_owned() + &id.1.to_string(),
+//         CapabilityKind => "c".to_owned() + &id.1.to_string(),
 //     }
 // }
 
-pub fn typ(
-    t: &Type,
-) -> String {
+/// Get a pretty string representation of a type.
+pub fn typ(t: &Type) -> String {
     match t {
-        Ti32 => "i32".to_string(),
-        THandle(r) => "handle(".to_owned() + &region(*r) + ")",
-        TMutable(t) => "mut ".to_owned() + &typ(t),
-        TTuple(ts, r) => {
-            "(".to_owned() + &types(ts) + ")@" + &region(*r)
-        }
-        TArray(t) => "[]".to_owned() + &typ(t),
-        TVar(id) => "t".to_owned() + &id.1.to_string(),
-        TExists(id, t) => {
-            "Exists t".to_owned()
-                + &id.1.to_string()
-                + ". "
-                + &typ(t)
-        }
-        TFunc(kinds, c, ts) => {
-            let quantification = 
-                if kinds.len() == 0 {
-                    "".to_owned()
-                } else {
-                    "Forall ".to_owned()
-                    + &kind_context(kinds)
-                    + ". "
-                };
-            let body = "[".to_owned()
-                + &caps(c)
-                + "]("
-                + &types(ts)
-                + ")->0";
+        I32Type => "i32".to_string(),
+        HandleType(r) => "handle(".to_owned() + &region(*r) + ")",
+        MutableType(t) => "mut ".to_owned() + &typ(t),
+        TupleType(ts, r) => "(".to_owned() + &types(ts) + ")@" + &region(*r),
+        ArrayType(t) => "[]".to_owned() + &typ(t),
+        VarType(id) => "t".to_owned() + &id.1.to_string(),
+        ExistsType(id, t) => "Exists t".to_owned() + &id.1.to_string() + ". " + &typ(t),
+        FuncType(kinds, c, ts) => {
+            let quantification = if kinds.len() == 0 {
+                "".to_owned()
+            } else {
+                "Forall ".to_owned() + &kind_context(kinds) + ". "
+            };
+            let body = "[".to_owned() + &caps(c) + "](" + &types(ts) + ")->0";
             quantification.to_owned() + &body
         }
-        TGuess(_) => panic!("type-checking artifact lasted too long"),
+        GuessType(_) => panic!("type-checking artifact lasted too long"),
     }
 }
 
-
+/// Get a pretty string representation of the kind of the given compile-time value.
 pub fn get_kind_str(ctval: &CTStackVal) -> String {
     kind(get_kind(ctval))
 }
 
+/// Get a pretty string representation of a byte, interpreting it as an instruction.
 pub fn op_u8(byte: u8) -> String {
     (match byte {
         0x00 => "req",
@@ -154,42 +149,44 @@ pub fn op_u8(byte: u8) -> String {
     .to_owned()
 }
 
-pub fn op1(op: OpCode1) -> String {
+/// Get a pretty string representation of an unverified opcode.
+pub fn unverified_op(op: UnverifiedOpcode) -> String {
     match op {
-        Op1Req => "req".to_owned(),
-        Op1Region => "region".to_owned(),
-        Op1Heap => "heap".to_owned(),
-        Op1Cap => "cap".to_owned(),
-        Op1CapLE => "cap_le".to_owned(),
-        Op1Own => "own".to_owned(),
-        Op1Read => "read".to_owned(),
-        Op1Both => "both".to_owned(),
-        Op1Handle => "handle".to_owned(),
-        Op1i32 => "i32".to_owned(),
-        Op1End => "END_FUNC".to_owned(),
-        Op1Mut => "mut".to_owned(),
-        Op1Tuple(n) => format!("tuple {}", n.to_string()),
-        Op1Arr => "arr".to_owned(),
-        Op1All => "all".to_owned(),
-        Op1Some => "some".to_owned(),
-        Op1Emos => "emos".to_owned(),
-        Op1Func(n) => format!("func {}", n.to_string()),
-        Op1CTGet(n) => format!("ct_get {}", n.to_string()),
-        Op1CTPop => "ct_pop".to_owned(),
-        Op1Unpack => "unpack".to_owned(),
-        Op1Get(n) => format!("get {}", n.to_string()),
-        Op1Init(n) => format!("init {}", n.to_string()),
-        Op1Malloc => "malloc".to_owned(),
-        Op1Proj(n) => format!("proj {}", n.to_string()),
-        Op1Call => "call".to_owned()
+        ReqOp => "req".to_owned(),
+        RegionOp => "region".to_owned(),
+        HeapOp => "heap".to_owned(),
+        CapOp => "cap".to_owned(),
+        CapLEOp => "cap_le".to_owned(),
+        UniqueOp => "own".to_owned(),
+        RWOp => "read".to_owned(),
+        BothOp => "both".to_owned(),
+        HandleOp => "handle".to_owned(),
+        I32Op => "i32".to_owned(),
+        EndFunctionOp => "END_FUNC".to_owned(),
+        MutOp => "mut".to_owned(),
+        TupleOp(n) => format!("tuple {}", n.to_string()),
+        ArrOp => "arr".to_owned(),
+        AllOp => "all".to_owned(),
+        SomeOp => "some".to_owned(),
+        EmosOp => "emos".to_owned(),
+        FuncOp(n) => format!("func {}", n.to_string()),
+        CTGetOp(n) => format!("ct_get {}", n.to_string()),
+        CTPopOp => "ct_pop".to_owned(),
+        UnpackOp => "unpack".to_owned(),
+        UnverifiedOpcode::GetOp(n) => format!("get {}", n.to_string()),
+        UnverifiedOpcode::InitOp(n) => format!("init {}", n.to_string()),
+        UnverifiedOpcode::MallocOp => "malloc".to_owned(),
+        UnverifiedOpcode::ProjOp(n) => format!("proj {}", n.to_string()),
+        UnverifiedOpcode::CallOp => "call".to_owned(),
     }
 }
 
+/// Get a pretty string representation of a kind.
 pub fn kind(k: Kind) -> String {
     (match k {
-        Kind::KCapability => "capability",
-        Kind::KRegion => "region",
-        Kind::KType => "type",
+        Kind::CapabilityKind => "capability",
+        Kind::RegionKind => "region",
+        Kind::TypeKind => "type",
     })
     .to_owned()
 }
