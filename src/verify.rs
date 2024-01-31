@@ -31,7 +31,7 @@ pub fn go(stmts: Vec<UnverifiedStmt>) -> Result<Vec<VerifiedStmt>, Error> {
         .collect::<Result<Vec<_>, Error>>()?;
     let mut constraints: Constraints = HashMap::new();
     for pair in stmts2 {
-        // TODO: check that the expected types of global functions are their actual types
+        // TODO: check that the expected types of global functions are their actual types (do a pass over the constraints)
         let (stmt, c) = pair;
         constraints.extend(c);
         out.push(stmt);
@@ -381,7 +381,7 @@ fn pass(
                         None => return Err(TypeErrorEmptyStack(pos, *op)),
                     }
                     stack_type.push_back(t);
-                    verified_ops.push(VerifiedOpcode::MallocOp(4)) // TODO: use actual size in bytes of t
+                    verified_ops.push(VerifiedOpcode::MallocOp(4)) // TODO: use actual size in bytes of t (sized data with kinds-are-calling-conventions polymorphism)
                 }
                 UnverifiedOpcode::ProjOp(i) => {
                     let mb_tpl = stack_type.pop_back();
@@ -485,6 +485,7 @@ fn pass(
                                                 &rgn_assignments,
                                                 &cap_assignments,
                                             ),
+                                            &capability_bounds
                                         )
                                     });
                                 if !types_match {
@@ -707,26 +708,26 @@ fn substitute_c(
 }
 
 /// Check if two types are equal, for typechecking purposes.
-fn type_eq(type1: &Type, type2: &Type) -> bool {
+fn type_eq(type1: &Type, type2: &Type, cap_bounds: &HashMap<Id, Vec<Capability>>) -> bool {
     match (type1, type2) {
         (I32Type, I32Type) => true,
         (HandleType(r1), HandleType(r2)) => r1 == r2,
-        (MutableType(t1), MutableType(t2)) => type_eq(t1, t2),
+        (MutableType(t1), MutableType(t2)) => type_eq(t1, t2, cap_bounds),
         (TupleType(ts1, r1), TupleType(ts2, r2)) => {
             r1 == r2 && ts1.len() == ts2.len() && {
                 let mut ts2 = ts2.iter();
                 for t1 in ts1 {
                     let t2 = ts2.next().unwrap();
-                    if !type_eq(t1, t2) {
+                    if !type_eq(t1, t2, cap_bounds) {
                         return false;
                     }
                 }
                 return true;
             }
         }
-        (ArrayType(t1), ArrayType(t2)) => type_eq(t1, t2),
+        (ArrayType(t1), ArrayType(t2)) => type_eq(t1, t2, cap_bounds),
         (VarType(id1), VarType(id2)) => id1 == id2,
-        (FuncType(kind_context1, _caps1, ts1), FuncType(kind_context2, _caps2, ts2)) => {
+        (FuncType(kind_context1, caps1, ts1), FuncType(kind_context2, caps2, ts2)) => {
             if kind_context1.len() != kind_context2.len() {
                 return false;
             }
@@ -738,10 +739,12 @@ fn type_eq(type1: &Type, type2: &Type) -> bool {
                 let entry2 = kind_context2_iter.next().unwrap();
                 match (entry1, entry2) {
                     (
-                        CapabilityKindContextEntry(id1, _bound1),
-                        CapabilityKindContextEntry(id2, _bound2),
+                        CapabilityKindContextEntry(id1, bound1),
+                        CapabilityKindContextEntry(id2, bound2),
                     ) => {
-                        // TODO: check capability equivalence of bounds
+                        if !caps_satisfy_caps(bound1, bound2, cap_bounds) || !caps_satisfy_caps(bound2, bound1, cap_bounds) {
+                            return false;
+                        }
                         cap_assignments.insert(*id2, vec![VarCap(*id1)]);
                     }
                     (RegionKindContextEntry(id1), RegionKindContextEntry(id2)) => {
@@ -757,19 +760,22 @@ fn type_eq(type1: &Type, type2: &Type) -> bool {
                 type_eq(
                     t1,
                     &substitute_t(t2, &type_assignments, &rgn_assignments, &cap_assignments),
+                    cap_bounds
                 )
             });
             if !types_match {
                 return false;
             }
-            // TODO: check capability equivalence
-            true
+            if !caps_satisfy_caps(caps1, caps2, cap_bounds) || !caps_satisfy_caps(caps2, caps1, cap_bounds) {
+                return false;
+            }
+            return true;
         }
         (ExistsType(id1, t1), ExistsType(id2, t2)) => {
             let mut sub = HashMap::new();
             sub.insert(*id2, VarType(*id1));
             let t2_subbed = substitute_t(t2, &sub, &HashMap::new(), &HashMap::new());
-            type_eq(t1, &t2_subbed)
+            type_eq(t1, &t2_subbed, cap_bounds)
         }
         (GuessType(label1), GuessType(label2)) => label1 == label2,
         (_, _) => false,
