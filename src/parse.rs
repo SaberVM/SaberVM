@@ -5,18 +5,24 @@ use crate::header::OpCode1::*;
 use crate::header::Stmt1;
 use crate::header::Stmt1::*;
 
-fn lex(istream: &[u8]) -> Result<Vec<OpCode1>, Error> {
-    let mut i = istream.iter();
-    let mut out = vec![];
-    i.next();
-    i.next();
-    i.next();
-    i.next();
-    let mut pos = 0;
+type ByteStream = Vec<u8>; // not streamed currently
+type LexedOpcodes = Vec<OpCode1>;
+type ParsedStmts = Vec<Stmt1>;
+
+const BYTES_TO_SKIP: u32 = 4;
+
+/// Lex bytes into (possibly parameterized) intructions.
+fn lex(bytes: &ByteStream) -> Result<LexedOpcodes, Error> {
+    let mut bytes_iter = bytes.iter();
+    let mut lexed_opcodes = vec![];
+    for _ in 0..BYTES_TO_SKIP {
+        bytes_iter.next();
+    }
+    let mut pos = BYTES_TO_SKIP;
     loop {
-        match i.next() {
+        match bytes_iter.next() {
             None => break,
-            Some(byte) => out.push(match byte {
+            Some(byte) => lexed_opcodes.push(match byte {
                 0x00 => Op1Req,
                 0x01 => Op1Region,
                 0x02 => Op1Heap,
@@ -29,7 +35,7 @@ fn lex(istream: &[u8]) -> Result<Vec<OpCode1>, Error> {
                 0x09 => Op1i32,
                 0x0A => Op1End,
                 0x0B => Op1Mut,
-                0x0C => match i.next() {
+                0x0C => match bytes_iter.next() {
                     None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1Tuple(*n),
                 },
@@ -37,26 +43,26 @@ fn lex(istream: &[u8]) -> Result<Vec<OpCode1>, Error> {
                 0x0E => Op1All,
                 0x0F => Op1Some,
                 0x10 => Op1Emos,
-                0x11 => match i.next() {
+                0x11 => match bytes_iter.next() {
                     None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1Func(*n),
                 },
-                0x12 => match i.next() {
+                0x12 => match bytes_iter.next() {
                     None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1CTGet(*n),
                 },
                 0x13 => Op1CTPop,
                 0x14 => Op1Unpack,
-                0x15 => match i.next() {
+                0x15 => match bytes_iter.next() {
                     None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1Get(*n),
                 },
-                0x16 => match i.next() {
+                0x16 => match bytes_iter.next() {
                     None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1Init(*n),
                 },
                 0x17 => Op1Malloc,
-                0x18 => match i.next() {
+                0x18 => match bytes_iter.next() {
                     None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1Proj(*n),
                 },
@@ -66,34 +72,36 @@ fn lex(istream: &[u8]) -> Result<Vec<OpCode1>, Error> {
         }
         pos += 1;
     }
-    Ok(out)
+    Ok(lexed_opcodes)
 }
 
-fn parse(tokens: &[OpCode1]) -> Vec<Stmt1> {
-    let mut out = vec![];
-    let mut curr = vec![];
-    let mut iter = tokens.iter();
-    let mut i = 4;
-    let mut pos = 4;
+/// Divide an opcode stream into functions, producing the AST.
+fn parse(tokens: &LexedOpcodes) -> ParsedStmts {
+    let mut parsed_stmts = vec![];
+    let mut current_stmt_opcodes = vec![];
+    let mut tokens_iter = tokens.iter();
+    let mut byte_pos = BYTES_TO_SKIP;
+    let mut function_label = byte_pos;
     loop {
-        match iter.next() {
+        match tokens_iter.next() {
             None => break,
             Some(Op1End) => {
-                out.push(Func1(pos, curr));
-                pos = i;
-                curr = vec![];
+                parsed_stmts.push(Func1(function_label, current_stmt_opcodes));
+                function_label = byte_pos;
+                current_stmt_opcodes = vec![];
             }
-            Some(op) => curr.push(*op),
+            Some(op) => current_stmt_opcodes.push(*op),
         }
-        i += 1;
+        byte_pos += 1;
     }
-    out.push(Func1(pos, curr));
-    out
+    parsed_stmts.push(Func1(function_label, current_stmt_opcodes));
+    parsed_stmts
 }
 
-pub fn go(istream: &[u8]) -> Result<Vec<Stmt1>, Error> {
+/// Lex a stream of bytes, maybe return an error, otherwise parse.
+pub fn go(istream: &ByteStream) -> Result<ParsedStmts, Error> {
     let tokens = lex(istream)?;
-    Ok(parse(&tokens))
+    Ok(parse(&tokens)) // this is two-pass currently (lex and parse); it would be straightforward to fuse these passes.
 }
 
 #[cfg(test)]
