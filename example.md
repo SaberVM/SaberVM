@@ -1,13 +1,13 @@
 By way of basic documentation
 ```
-0x00,   // _op_        _run-time_stack_    _compile-time_stack_
+0x00,   // _op_        _ruccn-time_stack_    _compile-time_stack_
 0x00,
 0x00,
 0x00,
 0x01,   // region                           r
 0x12,   // ct_get 0                         r,r
 0x00,
-0x06,   // read                             {+r},r
+0x06,   // rw                               {+r},r
 0x04,   // cap_le                           {c≤+r},r
 0x12,   // ct_get 0                         {c≤+r},{c≤+r},r
 0x00,
@@ -55,7 +55,7 @@ By way of basic documentation
 0x15,   // get 1        a,(_,_),a,k,r       a,{c≤+r},r
 0x01,
 0x16,   // init 0       (a,_),a,k,r         a,{c≤+r},r
-0x01,
+0x00,
 0x15,   // get 1        a,(a,_),a,k,r       a,{c≤+r},r
 0x01,
 0x16,   // init 1       (a,a),a,k,r         a,{c≤+r},r
