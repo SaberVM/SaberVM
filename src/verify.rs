@@ -1,6 +1,11 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 use std::collections::HashMap;
 use std::collections::VecDeque;
-
 use crate::header::CTStackVal;
 use crate::header::CTStackVal::*;
 use crate::header::Capability;
@@ -461,7 +466,7 @@ fn pass(
                                 let caps_needed_subbed =
                                     substitute_c(&caps_needed, &rgn_assignments, &cap_assignments);
                                 let caps_are_sufficient = caps_satisfy_caps(
-                                    caps_present,
+                                    caps_present.to_vec(),
                                     &caps_needed_subbed,
                                     &capability_bounds,
                                 );
@@ -569,7 +574,7 @@ fn get_substitutions(
             CapabilityKindContextEntry(id, bound) => match actual {
                 CapCTStackVal(c) => {
                     // check that the instantiated capability is more restrictive than the formal one, or equally restrictive
-                    if caps_satisfy_caps(c, &bound, &cap_bounds) {
+                    if caps_satisfy_caps(c.to_vec(), &bound, &cap_bounds) {
                         cap_assignments.insert(id, c.to_vec());
                     } else {
                         return Err(CapabilityErrorBadInstantiation(pos, bound, c.to_vec()));
@@ -602,41 +607,128 @@ fn get_substitutions(
 }
 
 /// Check if one capability is a subcapability of another.
-fn cap_subtype(
-    cap1: &Capability,
-    cap2: &Capability,
-    cap_bounds: &HashMap<Id, Vec<Capability>>,
-) -> bool {
-    match (cap1, cap2) {
-        (UniqueCap(r1), UniqueCap(r2)) if r1 == r2 => true,
-        (UniqueCap(r1), ReadWriteCap(r2)) if r1 == r2 => true,
-        (ReadWriteCap(r1), ReadWriteCap(r2)) if r1 == r2 => true,
-        (ReadWriteCap(_), UniqueCap(_)) => false,
-        (VarCap(id1), VarCap(id2)) if id1 == id2 => true,
-        (VarCap(id), cap2) => {
-            let bound = cap_bounds.get(id).unwrap();
-            caps_satisfy_cap(bound, cap2, cap_bounds)
-        }
-        _ => false,
-    }
-}
+// fn cap_subtype(
+//     cap1: &Capability,
+//     cap2: &Capability,
+//     cap_bounds: &HashMap<Id, Vec<Capability>>,
+// ) -> bool {
+//     match (cap1, cap2) {
+//         (UniqueCap(r1), UniqueCap(r2)) if r1 == r2 => true,
+//         (UniqueCap(r1), ReadWriteCap(r2)) if r1 == r2 => true,
+//         (ReadWriteCap(r1), ReadWriteCap(r2)) if r1 == r2 => true,
+//         (ReadWriteCap(_), UniqueCap(_)) => false,
+//         (VarCap(id1), VarCap(id2)) if id1 == id2 => true,
+//         (VarCap(id), cap2) => {
+//             let bound = cap_bounds.get(id).unwrap();
+//             caps_satisfy_cap(bound, cap2, cap_bounds)
+//         }
+//         _ => false,
+//     }
+// }
 
-/// Check if a capability set is sufficient to satisfy a given capability.
-fn caps_satisfy_cap(
-    caps: &[Capability],
-    cap: &Capability,
-    cap_bounds: &HashMap<Id, Vec<Capability>>,
-) -> bool {
-    caps.iter().any(|c_p| cap_subtype(c_p, cap, cap_bounds))
-}
+// /// Check if a capability set is sufficient to satisfy a given capability.
+// fn caps_satisfy_cap(
+//     caps: &[Capability],
+//     cap: &Capability,
+//     cap_bounds: &HashMap<Id, Vec<Capability>>,
+// ) -> bool {
+//     caps.iter().any(|c_p| cap_subtype(c_p, cap, cap_bounds))
+// }
 
 /// Check if a capability set is sufficient to satisfy another capability set.
+// This function is subtle because capabilities are relevant; that is, they cannot be forgotten.
+// In addition, some capabilities can be duplicated.
+// {c, 1r} doesn't satisfy {c}, so the program must free r first
+// {c, +r} doesn't satisfy {c}, so the program must be careful about duplicating +r
+// {c} doesn't satisfy {c, +r} even if c is bounded by +r, because it could be instantiated with 1r so it must not be duplicated.
+// {1r, 1r} satisfies {1r, 1r}, but you shouldn't be able to make a {1r, 1r} capability; only dead codepaths have them. 
+// So {1r} doesn't satisfy {1r, 1r}.
+// {+r} *does* satisfy {+r, +r}, because {+r} is duplicable; that is, {+r} *equals* {+r, +r}.
+// The theoretical characterization of what's going on is that capabilities have no contraction, and some don't even have weakening.
+// No contraction means that if we have {x, y} and are trying to coerce it to {z}, we must use both x and y. We can't drop them.
+// No weakening (for uniques) means that if we have {x} and we're trying to coerce it to {y, z}, we can only use x once.
+// This function is ultimately an attempt to coerce caps1 into caps2.
+// One approach is to remove capabilities from caps1 as we use them.
+// For each capability in caps2, remove that capability from caps1.
+// If the capability we removed is readwrite, also add it to a used_readwrites capability set.
+// If there isn't any and the capability we're looking for is readwrite, see if there's any in used_readwrites.
+// If there isn't any and there isn't any in used_readwrites, fail
+// If we make it to the end, fail if caps1 is nonempty. That would mean some weren't used.
+// The question is, how do we make this support using 1r for +r? 
+// The answer is, if we have 1r, then we know that any +r in the same capability set is referring to a different r.
+// So it will never be the case that a +r can be satisfied either by 1r or +r, 
+// so if we need to satisfy +r and 1r works, we would fail immediately if we hesitated from using the 1r to satisfy the +r.
 fn caps_satisfy_caps(
-    caps1: &[Capability],
+    mut caps1: Vec<Capability>,
     caps2: &[Capability],
     cap_bounds: &HashMap<Id, Vec<Capability>>,
 ) -> bool {
-    caps2.iter().all(|c| caps_satisfy_cap(caps1, c, cap_bounds))
+    let mut used_readwrites = vec![];
+    for needed_cap in caps2 {
+        match needed_cap {
+            UniqueCap(r) => {
+                let mb_pos = caps1.iter().position(|present_cap| 
+                    match present_cap {
+                        UniqueCap(r2) if r == r2 => true,
+                        VarCap(id) => {
+                            let bound = cap_bounds.get(id).unwrap();
+                            caps_satisfy_caps(bound.to_vec(), &[UniqueCap(*r)], cap_bounds)
+                        }
+                        _ => false
+                    }
+                );
+                match mb_pos {
+                    Some(pos) => {
+                        caps1.remove(pos);
+                    }
+                    None => return false
+                }
+            }
+            ReadWriteCap(r) => {
+                let mb_pos = caps1.iter().position(|present_cap|
+                    match present_cap {
+                        UniqueCap(r2) if r == r2 => true,
+                        ReadWriteCap(r2) if r == r2 => {
+                            used_readwrites.push(r2.clone());
+                            return true;
+                        }
+                        VarCap(id) => {
+                            let bound = cap_bounds.get(id).unwrap();
+                            caps_satisfy_caps(bound.to_vec(), &[ReadWriteCap(*r)], cap_bounds)
+                        }
+                        _ => false
+                    }
+                );
+                match mb_pos {
+                    Some(pos) => {
+                        caps1.remove(pos);
+                    }
+                    None => 
+                        if !used_readwrites.iter().any(|r2| r == r2) {
+                            return false;
+                        }
+                }
+            }
+            VarCap(id) => {
+                let mb_pos = caps1.iter().position(|present_cap|
+                    match present_cap {
+                        VarCap(id2) if id == id2 => true,
+                        _ => false
+                    }
+                );
+                match mb_pos {
+                    Some(pos) => {
+                        caps1.remove(pos);
+                    }
+                    None => return false
+                }
+            }
+        }
+    }
+    if caps1.len() > 0 {
+        return false;
+    }
+    return true;
 }
 
 /// Perform some variable substitutions within a type.
@@ -742,7 +834,7 @@ fn type_eq(type1: &Type, type2: &Type, cap_bounds: &HashMap<Id, Vec<Capability>>
                         CapabilityKindContextEntry(id1, bound1),
                         CapabilityKindContextEntry(id2, bound2),
                     ) => {
-                        if !caps_satisfy_caps(bound1, bound2, cap_bounds) || !caps_satisfy_caps(bound2, bound1, cap_bounds) {
+                        if !caps_satisfy_caps(bound1.to_vec(), bound2, cap_bounds) || !caps_satisfy_caps(bound2.to_vec(), bound1, cap_bounds) {
                             return false;
                         }
                         cap_assignments.insert(*id2, vec![VarCap(*id1)]);
@@ -766,7 +858,7 @@ fn type_eq(type1: &Type, type2: &Type, cap_bounds: &HashMap<Id, Vec<Capability>>
             if !types_match {
                 return false;
             }
-            if !caps_satisfy_caps(caps1, caps2, cap_bounds) || !caps_satisfy_caps(caps2, caps1, cap_bounds) {
+            if !caps_satisfy_caps(caps1.to_vec(), caps2, cap_bounds) || !caps_satisfy_caps(caps2.to_vec(), caps1, cap_bounds) {
                 return false;
             }
             return true;
