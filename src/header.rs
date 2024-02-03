@@ -43,6 +43,9 @@ pub enum UnverifiedOpcode {
     MallocOp,         // 0x17
     ProjOp(OpParam),  // 0x18
     CallOp,           // 0x19
+    PrintOp,          // 0x1A
+    LitOp(i32),       // 0x1B
+    GlobalFuncOp(u32),// 0x1C
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -52,6 +55,9 @@ pub enum VerifiedOpcode {
     MallocOp(OpParam),
     ProjOp(OpParam),
     CallOp,
+    PrintOp,
+    LitOp(i32),
+    GlobalFuncOp(Label)
 }
 
 /// Statements produced by the parsing pass.
@@ -173,4 +179,5 @@ pub enum Error {
     TypeErrorCallArgTypesMismatch(Pos, Expected<Vec<Type>>, Found<Vec<Type>>),
     CapabilityErrorBadInstantiation(Pos, Expected<Vec<Capability>>, Found<Vec<Capability>>),
     KindErrorBadInstantiation(Pos, Kind, CTStackVal),
+    TypeError(Pos, UnverifiedOpcode, Expected<Type>, Found<Type>),
 }

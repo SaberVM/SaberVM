@@ -22,11 +22,13 @@ fn go(bytes: &ByteStream) -> Result<(), Error> {
     let verified_stmts = verify::go(unverified_stmts)?;
 
     // the following is just for debugging
-    let first_func = &verified_stmts[0];
-    let Func(_, func_type, ops) = first_func;
-    dbg!(pretty::typ(&func_type));
-    for op in ops {
-        println!("{}", pretty::verified_op(&op))
+    for func in verified_stmts {
+        let Func(label, func_type, ops) = func;
+        dbg!(label);
+        dbg!(pretty::typ(&func_type));
+        for op in ops {
+            println!("{}", pretty::verified_op(&op))
+        }
     }
 
     Ok(())

@@ -74,6 +74,39 @@ fn lex(bytes: &ByteStream) -> Result<LexedOpcodes, Error> {
                     Some(n) => ProjOp(*n),
                 },
                 0x19 => CallOp,
+                0x1A => PrintOp,
+                0x1B => match bytes_iter.next() {
+                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n1) => 
+                        match bytes_iter.next() {
+                            None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
+                            Some(n2) =>
+                                match bytes_iter.next() {
+                                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
+                                    Some(n3) =>
+                                        match bytes_iter.next() {
+                                            None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
+                                            Some(n4) => LitOp(((*n1 as u32) << 24 | (*n2 as u32) << 16 | (*n3 as u32) << 8 | (*n4 as u32)) as i32),
+                                        }
+                                }
+                        }
+                }
+                0x1C => match bytes_iter.next() {
+                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n1) => 
+                        match bytes_iter.next() {
+                            None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
+                            Some(n2) =>
+                                match bytes_iter.next() {
+                                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
+                                    Some(n3) =>
+                                        match bytes_iter.next() {
+                                            None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
+                                            Some(n4) => GlobalFuncOp((*n1 as u32) << 24 | (*n2 as u32) << 16 | (*n3 as u32) << 8 | (*n4 as u32)),
+                                        }
+                                }
+                        }
+                }
                 op => return Err(SyntaxErrorUnknownOp(pos, *op)),
             }),
         }
@@ -101,7 +134,9 @@ fn parse(tokens: &LexedOpcodes) -> ParsedStmts {
         }
         byte_pos += 1;
     }
-    parsed_stmts.push(UnverifiedStmt::Func(function_label, current_stmt_opcodes));
+    if current_stmt_opcodes.len() > 0 {
+        parsed_stmts.push(UnverifiedStmt::Func(function_label, current_stmt_opcodes));
+    }
     parsed_stmts
 }
 

@@ -136,7 +136,7 @@ pub fn handle(res: Result<(), Error>) {
             }
             CapabilityErrorBadInstantiation(pos, bound, present) => {
                 println!(
-                    "Capability error! A capability parameter is being instantiated with a capability that doesn't meet its bound requirement. The bound is `{}` it's instantiated with `{}`.\n[{}]",
+                    "Capability error! A capability parameter is being instantiated with a capability that doesn't meet its bound requirement. The bound is `{}` but it's instantiated with `{}`.\n[{}]",
                     pretty::caps(&bound),
                     pretty::caps(&present),
                     pos
@@ -147,6 +147,15 @@ pub fn handle(res: Result<(), Error>) {
                     "Kind error! A `{}` variable is being instantiated with a `{}`.\n[{}]",
                     pretty::kind(kind),
                     pretty::get_kind_str(&instantiation),
+                    pos
+                )
+            }
+            TypeError(pos, op, expected, found) => {
+                println!(
+                    "Type error! `{}` expected a `{}`, but it is receiving a `{}`.\n[{}]",
+                    pretty::unverified_op(op),
+                    pretty::typ(&expected),
+                    pretty::typ(&found),
                     pos
                 )
             }

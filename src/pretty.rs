@@ -27,6 +27,9 @@ pub fn verified_op(op: &VerifiedOpcode) -> String {
         VerifiedOpcode::MallocOp(_n) => "malloc".to_owned(),
         VerifiedOpcode::ProjOp(n) => "proj ".to_owned() + &n.to_string(),
         VerifiedOpcode::CallOp => "call".to_owned(),
+        VerifiedOpcode::PrintOp => "print".to_owned(),
+        VerifiedOpcode::LitOp(lit) => "lit ".to_owned() + &lit.to_string(),
+        VerifiedOpcode::GlobalFuncOp(label) => "global ".to_owned() + &label.to_string(),
     }
 }
 
@@ -34,7 +37,7 @@ pub fn verified_op(op: &VerifiedOpcode) -> String {
 pub fn region(r: Region) -> String {
     match r {
         Region::HeapRgn => "Heap".to_string(),
-        VarRgn(id) => "r".to_owned() + &id.1.to_string(),
+        VarRgn(id) => "r".to_owned() + &id.0.to_string() + "_" + &id.1.to_string(),
     }
 }
 
@@ -150,6 +153,9 @@ pub fn op_u8(byte: u8) -> String {
         0x17 => "malloc",
         0x18 => "proj",
         0x19 => "call",
+        0x1A => "print",
+        0x1B => "int",
+        0x1C => "global",
         _ => panic!("unknown opcode {}", byte),
     })
     .to_owned()
@@ -184,6 +190,9 @@ pub fn unverified_op(op: UnverifiedOpcode) -> String {
         UnverifiedOpcode::MallocOp => "malloc".to_owned(),
         UnverifiedOpcode::ProjOp(n) => format!("proj {}", n.to_string()),
         UnverifiedOpcode::CallOp => "call".to_owned(),
+        UnverifiedOpcode::PrintOp => "print".to_owned(),
+        UnverifiedOpcode::LitOp(lit) => format!("lit {}", lit.to_string()),
+        UnverifiedOpcode::GlobalFuncOp(label) => format!("global {}", label),
     }
 }
 

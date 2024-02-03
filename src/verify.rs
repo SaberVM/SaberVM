@@ -454,6 +454,22 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     }
                     verified_ops.push(VerifiedOpcode::CallOp)
                 }
+                PrintOp => {
+                    let mb_type = stack_type.pop_back();
+                    match mb_type {
+                        Some(I32Type) => verified_ops.push(VerifiedOpcode::PrintOp),
+                        Some(t) => return Err(TypeError(pos, *op, I32Type, t)),
+                        None => return Err(TypeErrorEmptyStack(pos, *op)),
+                    }
+                }
+                LitOp(lit) => {
+                    stack_type.push_back(I32Type);
+                    verified_ops.push(VerifiedOpcode::LitOp(*lit))
+                }
+                GlobalFuncOp(label) => {
+                    stack_type.push_back(GuessType(*label));
+                    verified_ops.push(VerifiedOpcode::GlobalFuncOp(*label))
+                }
             },
         }
         pos += 1;
@@ -513,12 +529,12 @@ pub fn get_substitutions(
             CapabilityKindContextEntry(id, bound) => match actual {
                 CapCTStackVal(c) => {
                     // check that the instantiated capability is more restrictive than the formal one, or equally restrictive
-                    if caps_satisfy_caps(c.to_vec(), &bound, &cap_bounds) {
+                    if caps_satisfy_caps(c.to_vec(), &substitute_c(&bound, &rgn_assignments, &cap_assignments), &cap_bounds) {
                         cap_assignments.insert(id, c.to_vec());
                     } else {
                         return Err(Error::CapabilityErrorBadInstantiation(
                             pos,
-                            bound,
+                            substitute_c(&bound, &rgn_assignments, &cap_assignments),
                             c.to_vec(),
                         ));
                     }
