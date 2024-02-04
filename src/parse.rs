@@ -107,6 +107,10 @@ fn lex(bytes: &ByteStream) -> Result<LexedOpcodes, Error> {
                                 }
                         }
                 }
+                0x1D => match bytes_iter.next() {
+                    Some(n) => HaltOp(*n),
+                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
+                }
                 op => return Err(SyntaxErrorUnknownOp(pos, *op)),
             }),
         }
@@ -120,19 +124,20 @@ fn parse(tokens: &LexedOpcodes) -> ParsedStmts {
     let mut parsed_stmts = vec![];
     let mut current_stmt_opcodes = vec![];
     let mut tokens_iter = tokens.iter();
-    let mut byte_pos = BYTES_TO_SKIP;
-    let mut function_label = byte_pos;
+    let mut line = 0;
+    let mut function_label = 0;
     loop {
         match tokens_iter.next() {
             None => break,
             Some(EndFunctionOp) => {
                 parsed_stmts.push(UnverifiedStmt::Func(function_label, current_stmt_opcodes));
-                function_label = byte_pos;
+                line += 1;
+                function_label = line;
                 current_stmt_opcodes = vec![];
             }
             Some(op) => current_stmt_opcodes.push(*op),
         }
-        byte_pos += 1;
+        line += 1;
     }
     if current_stmt_opcodes.len() > 0 {
         parsed_stmts.push(UnverifiedStmt::Func(function_label, current_stmt_opcodes));

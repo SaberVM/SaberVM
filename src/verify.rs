@@ -423,6 +423,7 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     verified_ops.push(VerifiedOpcode::ProjOp(*i))
                 }
                 UnverifiedOpcode::CallOp => {
+                    // TODO: verify that there are no more instructions after this (because of CPS)
                     let mb_type = stack_type.pop_back();
                     match mb_type {
                         Some(t) => match t {
@@ -470,6 +471,10 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     stack_type.push_back(GuessType(*label));
                     verified_ops.push(VerifiedOpcode::GlobalFuncOp(*label))
                 }
+                HaltOp(code) => {
+                    verified_ops.push(VerifiedOpcode::HaltOp(*code))
+                    // TODO: verify that there are no more instructions after this
+                }
             },
         }
         pos += 1;
@@ -483,7 +488,13 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
 
 pub fn second_pass(constraints: Constraints, types: &HashMap<Label, Type>) -> Result<(), Error> {
     for (label, (pos, caps_present, stack_type, compile_time_stack)) in constraints {
-        let FuncType(kind_context, caps_needed, arg_ts_needed) = types.get(&label).unwrap().clone()
+        let mb_t = types.get(&label);
+        if let None = mb_t {
+            dbg!(&label);
+            dbg!(types);
+            panic!();
+        }
+        let FuncType(kind_context, caps_needed, arg_ts_needed) = mb_t.unwrap().clone()
         else {
             panic!()
         };

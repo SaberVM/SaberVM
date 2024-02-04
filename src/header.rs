@@ -17,35 +17,36 @@ pub type OpParam = u8;
 /// This includes all the static analysis ops, which disappear after verification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnverifiedOpcode {
-    ReqOp,            // 0x00
-    RegionOp,         // 0x01
-    HeapOp,           // 0x02
-    CapOp,            // 0x03
-    CapLEOp,          // 0x04
-    UniqueOp,         // 0x05
-    RWOp,             // 0x06
-    BothOp,           // 0x07
-    HandleOp,         // 0x08
-    I32Op,            // 0x09
-    EndFunctionOp,    // 0x0A
-    MutOp,            // 0x0B
-    TupleOp(OpParam), // 0x0C
-    ArrOp,            // 0x0D
-    AllOp,            // 0x0E
-    SomeOp,           // 0x0F
-    EmosOp,           // 0x10
-    FuncOp(OpParam),  // 0x11
-    CTGetOp(OpParam), // 0x12
-    CTPopOp,          // 0x13
-    UnpackOp,         // 0x14
-    GetOp(OpParam),   // 0x15
-    InitOp(OpParam),  // 0x16
-    MallocOp,         // 0x17
-    ProjOp(OpParam),  // 0x18
-    CallOp,           // 0x19
-    PrintOp,          // 0x1A
-    LitOp(i32),       // 0x1B
-    GlobalFuncOp(u32),// 0x1C
+    ReqOp,             // 0x00
+    RegionOp,          // 0x01
+    HeapOp,            // 0x02
+    CapOp,             // 0x03
+    CapLEOp,           // 0x04
+    UniqueOp,          // 0x05
+    RWOp,              // 0x06
+    BothOp,            // 0x07
+    HandleOp,          // 0x08
+    I32Op,             // 0x09
+    EndFunctionOp,     // 0x0A
+    MutOp,             // 0x0B
+    TupleOp(OpParam),  // 0x0C
+    ArrOp,             // 0x0D
+    AllOp,             // 0x0E
+    SomeOp,            // 0x0F
+    EmosOp,            // 0x10
+    FuncOp(OpParam),   // 0x11
+    CTGetOp(OpParam),  // 0x12
+    CTPopOp,           // 0x13
+    UnpackOp,          // 0x14
+    GetOp(OpParam),    // 0x15
+    InitOp(OpParam),   // 0x16
+    MallocOp,          // 0x17
+    ProjOp(OpParam),   // 0x18
+    CallOp,            // 0x19
+    PrintOp,           // 0x1A
+    LitOp(i32),        // 0x1B
+    GlobalFuncOp(u32), // 0x1C
+    HaltOp(u8),        // 0x1D
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -57,7 +58,8 @@ pub enum VerifiedOpcode {
     CallOp,
     PrintOp,
     LitOp(i32),
-    GlobalFuncOp(Label)
+    GlobalFuncOp(Label),
+    HaltOp(u8),
 }
 
 /// Statements produced by the parsing pass.

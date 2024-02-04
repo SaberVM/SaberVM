@@ -30,6 +30,7 @@ pub fn verified_op(op: &VerifiedOpcode) -> String {
         VerifiedOpcode::PrintOp => "print".to_owned(),
         VerifiedOpcode::LitOp(lit) => "lit ".to_owned() + &lit.to_string(),
         VerifiedOpcode::GlobalFuncOp(label) => "global ".to_owned() + &label.to_string(),
+        VerifiedOpcode::HaltOp(code) => "halt ".to_owned() + &code.to_string(),
     }
 }
 
@@ -193,6 +194,7 @@ pub fn unverified_op(op: UnverifiedOpcode) -> String {
         UnverifiedOpcode::PrintOp => "print".to_owned(),
         UnverifiedOpcode::LitOp(lit) => format!("lit {}", lit.to_string()),
         UnverifiedOpcode::GlobalFuncOp(label) => format!("global {}", label),
+        UnverifiedOpcode::HaltOp(code) => format!("halt {}", code),
     }
 }
 

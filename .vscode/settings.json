@@ -9,5 +9,6 @@
     "./Cargo.toml",
     "./Cargo.toml",
     "./Cargo.toml"
-  ]
+  ],
+  "C_Cpp.default.compilerPath": "/usr/bin/clang"
 }
