@@ -323,8 +323,14 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     if stack_len - 1 < i2 {
                         return Err(TypeErrorParamOutOfRange(pos, *op));
                     }
-                    stack_type.push_back(stack_type.get(stack_len - 1 - i2).unwrap().clone());
-                    verified_ops.push(VerifiedOpcode::GetOp(*i))
+                    let mut offset = 0;
+                    for j in 0..*i {
+                        offset += get_size(&stack_type[stack_len - 1 - (j as usize)].clone());
+                    }
+                    let t = stack_type.get(stack_len - 1 - i2).unwrap().clone();
+                    let size = get_size(&t);
+                    stack_type.push_back(t);
+                    verified_ops.push(VerifiedOpcode::GetOp(offset, size));
                 }
                 UnverifiedOpcode::InitOp(i) => {
                     let mb_val = stack_type.pop_back();
@@ -350,7 +356,12 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                                             ));
                                         }
                                         if formal == &actual {
-                                            stack_type.push_back(tpl)
+                                            stack_type.push_back(tpl);
+                                            let mut offset = 0;
+                                            for i2 in 0..*i {
+                                                offset += get_size(&component_types[i2 as usize])
+                                            }
+                                            verified_ops.push(VerifiedOpcode::InitOp(offset));
                                         } else {
                                             return Err(TypeErrorInit(pos, formal.clone(), actual));
                                         }
@@ -361,7 +372,6 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                         },
                         None => return Err(TypeErrorEmptyStack(pos, *op)),
                     }
-                    verified_ops.push(VerifiedOpcode::InitOp(*i))
                 }
                 UnverifiedOpcode::MallocOp => {
                     let mb_type = compile_time_stack.pop();
@@ -390,8 +400,9 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                         }
                         None => return Err(TypeErrorEmptyStack(pos, *op)),
                     }
+                    let size = get_size(&t);
                     stack_type.push_back(t);
-                    verified_ops.push(VerifiedOpcode::MallocOp(4)) // TODO: use actual size in bytes of t (sized data with kinds-are-calling-conventions polymorphism)
+                    verified_ops.push(VerifiedOpcode::MallocOp(size));
                 }
                 UnverifiedOpcode::ProjOp(i) => {
                     let mb_tpl = stack_type.pop_back();
@@ -412,7 +423,12 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                                                 cap_coeffect,
                                             ));
                                         }
+                                        let mut offset = 0;
+                                        for i2 in 0..*i {
+                                            offset += get_size(&component_types[i2 as usize]);
+                                        }
                                         stack_type.push_back(t.clone());
+                                        verified_ops.push(VerifiedOpcode::ProjOp(offset))
                                     }
                                 }
                             }
@@ -420,7 +436,6 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                         },
                         None => return Err(TypeErrorEmptyStack(pos, *op)),
                     }
-                    verified_ops.push(VerifiedOpcode::ProjOp(*i))
                 }
                 UnverifiedOpcode::CallOp => {
                     // TODO: verify that there are no more instructions after this (because of CPS)
@@ -511,9 +526,23 @@ pub fn second_pass(constraints: Constraints, types: &HashMap<Label, Type>) -> Re
     Ok(())
 }
 
+fn get_size(t: &Type) -> usize {
+    match t {
+        I32Type => 1, // 32-bit int
+        HandleType(_) => 2, // 64-bit pointer
+        MutableType(t) => get_size(t),
+        ArrayType(_) => 4, // 128-bit fat pointer (no unboxed arrays yet)
+        VarType(_) => 2, // 128-bit pointer (TODO: kinds-are-calling-conventions polymorphism)
+        TupleType(_, _) => 4, // 128-bit fat pointer (TODO: kinds-are-calling-conventions polymorphism)
+        ExistsType(_, t) => get_size(t),
+        FuncType(_,_,_) => 1, // 32-bit jump label
+        GuessType(_) => panic!("GuessType in get_size"),
+    }
+}
+
 /// Produce, from some function type information and the top of the compile-time stack,
 /// some hashmaps describing substitutions that must be made in the rest of the type of the function.
-pub fn get_substitutions(
+fn get_substitutions(
     pos: Pos,
     ct_args: Vec<CTStackVal>,
     quantified: KindContext,

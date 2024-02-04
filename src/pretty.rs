@@ -22,10 +22,10 @@ use crate::header::VerifiedOpcode;
 /// Get a pretty string representation of a verified opcode.
 pub fn verified_op(op: &VerifiedOpcode) -> String {
     match op {
-        VerifiedOpcode::GetOp(n) => "get ".to_owned() + &n.to_string(),
-        VerifiedOpcode::InitOp(n) => "init ".to_owned() + &n.to_string(),
-        VerifiedOpcode::MallocOp(_n) => "malloc".to_owned(),
-        VerifiedOpcode::ProjOp(n) => "proj ".to_owned() + &n.to_string(),
+        VerifiedOpcode::GetOp(offset, size) => "get ".to_owned() + &offset.to_string() + " " + &size.to_string(),
+        VerifiedOpcode::InitOp(offset) => "init ".to_owned() + &offset.to_string(),
+        VerifiedOpcode::MallocOp(size) => "malloc ".to_owned() + &size.to_string(),
+        VerifiedOpcode::ProjOp(offset) => "proj ".to_owned() + &offset.to_string(),
         VerifiedOpcode::CallOp => "call".to_owned(),
         VerifiedOpcode::PrintOp => "print".to_owned(),
         VerifiedOpcode::LitOp(lit) => "lit ".to_owned() + &lit.to_string(),
@@ -87,15 +87,6 @@ pub fn cap(c: Capability) -> String {
 pub fn types(ts: &Vec<Type>) -> String {
     ts.iter().map(|t| typ(t)).collect::<Vec<_>>().join(", ")
 }
-
-// /// Get a pretty string representation of an identifier of a given kind.
-// fn var(id: &Id, k: &Kind) -> String {
-//     match k {
-//         RegionKind => "r".to_owned() + &id.1.to_string(),
-//         TypeKind => "t".to_owned() + &id.1.to_string(),
-//         CapabilityKind => "c".to_owned() + &id.1.to_string(),
-//     }
-// }
 
 /// Get a pretty string representation of a type.
 pub fn typ(t: &Type) -> String {

@@ -51,10 +51,10 @@ pub enum UnverifiedOpcode {
 
 #[derive(Clone, Copy, Debug)]
 pub enum VerifiedOpcode {
-    GetOp(OpParam),
-    InitOp(OpParam),
-    MallocOp(OpParam),
-    ProjOp(OpParam),
+    GetOp(usize, usize),
+    InitOp(usize),
+    MallocOp(usize),
+    ProjOp(usize),
     CallOp,
     PrintOp,
     LitOp(i32),

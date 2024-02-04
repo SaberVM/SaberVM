@@ -12,15 +12,17 @@ use crate::header::VerifiedOpcode::*;
 use crate::header::VerifiedStmt::*;
 
 extern "C" {
-    fn vm_function(bytes: *mut u8) -> u8;
+    fn vm_function(bytes: *mut u32, len: usize) -> u8;
 }
 
 pub fn go(stmts: Vec<VerifiedStmt>) {
-    dbg!(unsafe {vm_function(merge_stmts(stmts).as_mut_ptr())});
+    let mut code = merge_stmts(stmts);
+    let len = code.len();
+    dbg!(unsafe {vm_function(code.as_mut_ptr(), len)});
 }
 
-fn merge_stmts(stmts: Vec<VerifiedStmt>) -> Vec<u8> {
-    let mut merged: Vec<u8> = Vec::new();
+fn merge_stmts(stmts: Vec<VerifiedStmt>) -> Vec<u32> {
+    let mut merged: Vec<u32> = Vec::new();
     let mut label_map = HashMap::new();
     let mut next_pos: u32 = 0;
     stmts.iter().for_each(|stmt| {
@@ -43,22 +45,16 @@ fn merge_stmts(stmts: Vec<VerifiedStmt>) -> Vec<u8> {
     merged
 }
 
-fn op_to_bytes(op: &VerifiedOpcode) -> Vec<u8> {
+fn op_to_bytes(op: &VerifiedOpcode) -> Vec<u32> {
     match op {
-        GetOp(offset) => vec![0x00, *offset],
-        InitOp(offset) => vec![0x01, *offset],
-        MallocOp(size) => vec![0x02, *size],
-        ProjOp(offset) => vec![0x03, *offset],
-        CallOp => vec![0x04],
-        PrintOp => vec![0x05],
-        LitOp(lit) => {
-            let l = *lit as u32;
-            vec![0x06, (l >> 24) as u8, (l >> 16) as u8, (l >> 8) as u8, l as u8]
-        }
-        GlobalFuncOp(label) => {
-            let l = *label as u32;
-            vec![0x07, (l >> 24) as u8, (l >> 16) as u8, (l >> 8) as u8, l as u8]
-        }
-        HaltOp(code) => vec![0x08, *code],
+        GetOp(offset, size) => vec![0, *offset as u32, *size as u32],
+        InitOp(offset) => vec![1, *offset as u32],
+        MallocOp(size) => vec![2, *size as u32],
+        ProjOp(offset) => vec![3, *offset as u32],
+        CallOp => vec![4],
+        PrintOp => vec![5],
+        LitOp(lit) => vec![6, *lit as u32],
+        GlobalFuncOp(label) => vec![7, *label as u32],
+        HaltOp(code) => vec![8, *code as u32],
     }
 }

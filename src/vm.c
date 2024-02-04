@@ -16,26 +16,30 @@ void dbg_int(int i) {
     #endif
 }
 
-uint8_t vm_function(uint8_t bytes[]) {
-    for (int i = 0; i < 20; i++) {
+uint8_t vm_function(uint32_t instrs[], size_t instrs_len) {
+    for (int i = 0; i < instrs_len; i++) {
         dbg_str(" ");
-        dbg_int(bytes[i]);
+        dbg_int(instrs[i]);
     }
     dbg_str("\n");
     uint32_t pc = 0;
     uint8_t sp = 0;
     uint32_t stack[1024];
-    int call_count = 10;
     while (1) {
         dbg_str("pc: ");
         dbg_int(pc);
         dbg_str("\n");
-        switch (bytes[pc]) {
+        switch (instrs[pc]) {
             case 0: // get 
-                stack[sp] = stack[sp-bytes[pc + 1]];
-                sp += 1;
-                pc += 2;
-                break;
+                {
+                    dbg_str("get!\n");
+                    uint32_t offset = instrs[pc + 1];
+                    uint32_t size = instrs[pc + 2];
+                    stack[sp] = stack[sp-offset-size];
+                    sp += size;
+                    pc += 3;
+                    break;
+                }
             case 1: // init
                 printf("init unimplemented\n");
                 pc += 2;
@@ -50,8 +54,8 @@ uint8_t vm_function(uint8_t bytes[]) {
                 break;
             case 4: // call
                 dbg_str("call!\n");
-                pc = (uint32_t)(stack[--sp]);
-                if (call_count-- == 0) {exit(0);}
+                pc = (uint32_t)(stack[sp-1]);
+                sp -= 1;
                 break;
             case 5: // print
                 dbg_str("print!\n");
@@ -60,26 +64,26 @@ uint8_t vm_function(uint8_t bytes[]) {
                 pc += 1;
                 break;
             case 6: // literal 
-                dbg_str("literal!\n");
                 {
-                    unsigned int lit = bytes[pc + 1] << 24 | bytes[pc + 2] << 16 | bytes[pc + 3] << 8 | bytes[pc + 4];
+                    dbg_str("literal!\n");
+                    uint32_t lit = instrs[pc + 1];
                     stack[sp] = lit;
                     sp += 1;
-                    pc += 5;
+                    pc += 2;
                 }
                 break;
             case 7: // global function
-                dbg_str("global function!\n");
                 {
-                    unsigned int lit = bytes[pc + 1] << 24 | bytes[pc + 2] << 16 | bytes[pc + 3] << 8 | bytes[pc + 4];
+                    dbg_str("global function!\n");
+                    unsigned int lit = instrs[pc + 1];
                     stack[sp] = lit;
                     sp += 1;
-                    pc += 5;
+                    pc += 2;
                 }
                 break;
             case 8: // halt
                 dbg_str("halt!\n");
-                exit(bytes[pc + 1]);
+                exit(instrs[pc + 1]);
                 break;
         }
     }
