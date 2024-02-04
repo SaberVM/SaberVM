@@ -47,6 +47,7 @@ pub enum UnverifiedOpcode {
     LitOp(i32),        // 0x1B
     GlobalFuncOp(u32), // 0x1C
     HaltOp(u8),        // 0x1D
+    PackOp,            // 0x1E
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -182,4 +183,7 @@ pub enum Error {
     CapabilityErrorBadInstantiation(Pos, Expected<Vec<Capability>>, Found<Vec<Capability>>),
     KindErrorBadInstantiation(Pos, Kind, CTStackVal),
     TypeError(Pos, UnverifiedOpcode, Expected<Type>, Found<Type>),
+    TypeErrorNonEmptyKindContextOnMain,
+    CapabilityErrorMainRequiresCapability,
+    TypeErrorMainHasArgs,
 }

@@ -111,6 +111,7 @@ fn lex(bytes: &ByteStream) -> Result<LexedOpcodes, Error> {
                     Some(n) => HaltOp(*n),
                     None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
                 }
+                0x1E => PackOp,
                 op => return Err(SyntaxErrorUnknownOp(pos, *op)),
             }),
         }

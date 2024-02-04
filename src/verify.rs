@@ -51,6 +51,20 @@ pub fn go(unverified_stmts: Vec<UnverifiedStmt>) -> Result<Vec<VerifiedStmt>, Er
         constraints.extend(c);
         verified_stmts.push(stmt);
     }
+    match verified_stmts.get(0) {
+        Some(Func(_, FuncType(kc, c, arg_ts), _)) => {
+            if kc.len() != 0 {
+                return Err(TypeErrorNonEmptyKindContextOnMain)
+            }
+            if c.len() != 0 {
+                return Err(CapabilityErrorMainRequiresCapability)
+            }
+            if arg_ts.len() != 0 {
+                return Err(TypeErrorMainHasArgs)
+            }
+        }
+        _ => ()
+    }
     let () = second_pass(
         constraints,
         &verified_stmts
@@ -489,6 +503,29 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                 HaltOp(code) => {
                     verified_ops.push(VerifiedOpcode::HaltOp(*code))
                     // TODO: verify that there are no more instructions after this
+                }
+                PackOp => {
+                    match stack_type.pop_back() {
+                        Some(hidden_vals_type) => 
+                            match compile_time_stack.pop() {
+                                Some(TypeCTStackVal(hidden_type)) => 
+                                    match compile_time_stack.pop() {
+                                        Some(TypeCTStackVal(ExistsType(id, existential_type))) => {
+                                            let unpacked_type = substitute_t(&existential_type, &HashMap::from([(id, hidden_type)]), &HashMap::new(), &HashMap::new());
+                                            if !type_eq(&hidden_vals_type, &unpacked_type, &capability_bounds) {
+                                                return Err(TypeError(pos, *op, unpacked_type, hidden_vals_type));
+                                            }
+                                            stack_type.push_back(dbg!(ExistsType(id, existential_type)));
+                                        }
+                                        Some(TypeCTStackVal(t)) => return Err(TypeErrorExistentialExpected(pos, t)),
+                                        Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
+                                        None => return Err(TypeErrorEmptyCTStack(pos, *op))
+                                    }
+                                Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
+                                None => return Err(TypeErrorEmptyCTStack(pos, *op))
+                            }
+                        None => return Err(TypeErrorEmptyStack(pos, *op)),
+                    }
                 }
             },
         }

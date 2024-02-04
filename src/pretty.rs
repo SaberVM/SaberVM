@@ -186,6 +186,7 @@ pub fn unverified_op(op: UnverifiedOpcode) -> String {
         UnverifiedOpcode::LitOp(lit) => format!("lit {}", lit.to_string()),
         UnverifiedOpcode::GlobalFuncOp(label) => format!("global {}", label),
         UnverifiedOpcode::HaltOp(code) => format!("halt {}", code),
+        PackOp => "pack".to_owned(),
     }
 }
 

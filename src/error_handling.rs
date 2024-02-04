@@ -159,6 +159,15 @@ pub fn handle(res: Result<(), Error>) {
                     pos
                 )
             }
+            TypeErrorNonEmptyKindContextOnMain => {
+                println!("Type error! The entrypoint function cannot be polymorphic in any way.")
+            }
+            CapabilityErrorMainRequiresCapability => {
+                println!("Capability error! The entrypoint function cannot require any capabilities.")
+            }
+            TypeErrorMainHasArgs => {
+                println!("Type error! The entrypoint function cannot require arguments.")
+            }
         },
         Ok(()) => (),
     }
