@@ -112,6 +112,7 @@ fn lex(bytes: &ByteStream) -> Result<LexedOpcodes, Error> {
                     None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
                 }
                 0x1E => PackOp,
+                0x1F => Word32Op,
                 op => return Err(SyntaxErrorUnknownOp(pos, *op)),
             }),
         }

@@ -13,6 +13,7 @@ use crate::header::KindContext;
 use crate::header::KindContextEntry::*;
 use crate::header::Region;
 use crate::header::Region::*;
+use crate::header::Repr;
 use crate::header::Type;
 use crate::header::Type::*;
 use crate::header::UnverifiedOpcode;
@@ -49,15 +50,15 @@ pub fn kind_context(kinds: &KindContext) -> String {
         .iter()
         .map(|entry| match entry {
             CapabilityKindContextEntry(id, bound) => {
-                let prefix = "c".to_owned() + &id.1.to_string();
+                let prefix = "c".to_owned() + &id.0.to_string() + "_" + &id.1.to_string();
                 if bound.len() != 0 {
                     return prefix + "≤" + &caps(bound);
                 } else {
                     return prefix;
                 }
             }
-            RegionKindContextEntry(id) => "r".to_owned() + &id.1.to_string(),
-            TypeKindContextEntry(id) => "t".to_owned() + &id.1.to_string(),
+            RegionKindContextEntry(id) => "r".to_owned() + &id.0.to_string() + "_" + &id.1.to_string(),
+            TypeKindContextEntry(id, repr) => "t".to_owned() + &id.0.to_string() + "_" + &id.1.to_string() + ": " + &representation(repr),
         })
         .collect::<Vec<_>>()
         .join(",")
@@ -95,9 +96,9 @@ pub fn typ(t: &Type) -> String {
         HandleType(r) => "handle(".to_owned() + &region(*r) + ")",
         MutableType(t) => "mut ".to_owned() + &typ(t),
         TupleType(ts, r) => "(".to_owned() + &types(ts) + ")@" + &region(*r),
-        ArrayType(t) => "[]".to_owned() + &typ(t),
-        VarType(id) => "t".to_owned() + &id.1.to_string(),
-        ExistsType(id, t) => "Exists t".to_owned() + &id.1.to_string() + ". " + &typ(t),
+        ArrayType(t, r) => "[".to_owned() + &typ(t) + "]@" + &region(*r),
+        VarType(id, _repr) => "t".to_owned() + &id.1.to_string(),
+        ExistsType(id, repr, t) => "Exists t".to_owned() + &id.1.to_string() + ": " + &representation(repr) + ". " + &typ(t),
         FuncType(kinds, c, ts) => {
             let quantification = if kinds.len() == 0 {
                 "".to_owned()
@@ -187,6 +188,7 @@ pub fn unverified_op(op: UnverifiedOpcode) -> String {
         UnverifiedOpcode::GlobalFuncOp(label) => format!("global {}", label),
         UnverifiedOpcode::HaltOp(code) => format!("halt {}", code),
         PackOp => "pack".to_owned(),
+        Word32Op => "word32".to_owned(),
     }
 }
 
@@ -196,6 +198,17 @@ pub fn kind(k: Kind) -> String {
         Kind::CapabilityKind => "capability",
         Kind::RegionKind => "region",
         Kind::TypeKind => "type",
+        Kind::ReprKind => "repr",
     })
     .to_owned()
+}
+
+pub fn representation(repr: &Repr) -> String {
+    match repr {
+        Repr::Word32Repr => "32bit".to_owned(),
+        Repr::Word64Repr => "64bit".to_owned(),
+        Repr::PtrRepr(repr) => "Ptr(".to_owned() + &representation(repr) + ")",
+        Repr::ArrayRepr(repr) => "Arr(".to_owned() + &representation(repr) + ")",
+        Repr::TupleRepr(reprs) => "Tuple(".to_owned() + &reprs.iter().map(|r| representation(r)).collect::<Vec<_>>().join(", ") + ")"
+    }
 }

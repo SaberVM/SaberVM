@@ -48,6 +48,7 @@ pub enum UnverifiedOpcode {
     GlobalFuncOp(u32), // 0x1C
     HaltOp(u8),        // 0x1D
     PackOp,            // 0x1E
+    Word32Op,          // 0x1F
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -77,10 +78,20 @@ pub enum VerifiedStmt {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Repr {
+    Word32Repr,
+    Word64Repr,
+    PtrRepr(Box<Repr>),
+    TupleRepr(Vec<Repr>),
+    ArrayRepr(Box<Repr>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Kind {
     RegionKind,
     TypeKind,
     CapabilityKind,
+    ReprKind,
 }
 
 /// The type for identifiers.
@@ -106,7 +117,7 @@ pub enum Capability {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KindContextEntry {
     CapabilityKindContextEntry(Id, Vec<Capability>),
-    TypeKindContextEntry(Id),
+    TypeKindContextEntry(Id, Repr),
     RegionKindContextEntry(Id),
 }
 
@@ -123,11 +134,25 @@ pub enum Type {
     HandleType(Region),
     MutableType(Box<Type>),
     TupleType(Vec<Type>, Region),
-    ArrayType(Box<Type>),
-    VarType(Id),
+    ArrayType(Box<Type>, Region),
+    VarType(Id, Repr),
     FuncType(KindContext, Vec<Capability>, Vec<Type>),
-    ExistsType(Id, Box<Type>),
+    ExistsType(Id, Repr, Box<Type>),
     GuessType(Label),
+}
+
+pub fn get_repr(t: &Type) -> Repr {
+    match t {
+        Type::I32Type => Repr::Word32Repr,
+        Type::HandleType(_) => Repr::Word64Repr,
+        Type::MutableType(t) => get_repr(t),
+        Type::TupleType(ts, _) => Repr::PtrRepr(Box::new(Repr::TupleRepr(ts.iter().map(get_repr).collect()))),
+        Type::ArrayType(t, _) => Repr::PtrRepr(Box::new(Repr::ArrayRepr(Box::new(get_repr(t))))),
+        Type::VarType(_, r) => r.clone(),
+        Type::FuncType(_, _, _) => Repr::Word32Repr,
+        Type::ExistsType(_, _, t) => get_repr(&*t),
+        Type::GuessType(_) => panic!("tried to get repr of GuessType"),
+    }
 }
 
 /// The type of things on the compile-time stack, which can come in any kind.
@@ -136,6 +161,7 @@ pub enum CTStackVal {
     RegionCTStackVal(Region),
     CapCTStackVal(Vec<Capability>),
     TypeCTStackVal(Type),
+    ReprCTStackVal(Repr),
 }
 
 /// Get the kind of a compile-time stack value.
@@ -144,6 +170,7 @@ pub fn get_kind(ctval: &CTStackVal) -> Kind {
         CTStackVal::CapCTStackVal(_) => Kind::CapabilityKind,
         CTStackVal::RegionCTStackVal(_) => Kind::RegionKind,
         CTStackVal::TypeCTStackVal(_) => Kind::TypeKind,
+        CTStackVal::ReprCTStackVal(_) => Kind::ReprKind,
     }
 }
 
@@ -186,4 +213,6 @@ pub enum Error {
     TypeErrorNonEmptyKindContextOnMain,
     CapabilityErrorMainRequiresCapability,
     TypeErrorMainHasArgs,
+    RepresentationError(Pos, UnverifiedOpcode, Expected<Repr>, Found<Repr>),
+    RepresentationErrorBadInstantiation(Pos, Expected<Repr>, Found<Repr>),
 }

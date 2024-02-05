@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use crate::header::get_repr;
 use crate::header::CTStackVal;
 use crate::header::CTStackVal::*;
 use crate::header::Capability;
@@ -18,6 +19,7 @@ use crate::header::Label;
 use crate::header::Pos;
 use crate::header::Region;
 use crate::header::Region::*;
+use crate::header::Repr;
 use crate::header::Type;
 use crate::header::Type::*;
 use crate::header::UnverifiedOpcode;
@@ -83,7 +85,7 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
     // The stacks used for this pass algorithm.
     let mut compile_time_stack: CTStackType = vec![];
     let mut stack_type: StackType = VecDeque::from([]);
-    let mut exist_stack: Vec<Id> = vec![];
+    let mut exist_stack: Vec<(Id, Repr)> = vec![];
 
     // The types the function expects the top of the stack to have.
     let mut arg_types: Vec<Type> = vec![];
@@ -233,7 +235,7 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     let mb_rgn = compile_time_stack.pop();
                     match mb_rgn {
                         Some(RegionCTStackVal(r)) => {
-                            compile_time_stack.push(TypeCTStackVal(TupleType(component_types, r)))
+                            compile_time_stack.push(TypeCTStackVal(TupleType(component_types, r)));
                         }
                         Some(ctval) => return Err(KindError(pos, *op, RegionKind, ctval)),
                         None => return Err(TypeErrorEmptyCTStack(pos, *op)),
@@ -243,35 +245,51 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     let mb_type = compile_time_stack.pop();
                     match mb_type {
                         Some(TypeCTStackVal(t)) => {
-                            compile_time_stack.push(TypeCTStackVal(ArrayType(Box::new(t))))
+                            match compile_time_stack.pop() {
+                                Some(RegionCTStackVal(r)) => compile_time_stack.push(TypeCTStackVal(ArrayType(Box::new(t), r))),
+                                Some(ctval) => return Err(KindError(pos, *op, RegionKind, ctval)),
+                                None => return Err(TypeErrorEmptyCTStack(pos, *op)),
+                            }
                         }
                         Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
                         None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                     }
                 }
                 AllOp => {
-                    let id = Id(*label, fresh_id);
-                    let t = VarType(id);
-                    compile_time_stack.push(TypeCTStackVal(t));
-                    type_vars.push(id);
-                    kind_context.push(TypeKindContextEntry(id));
-                    fresh_id += 1
+                    match compile_time_stack.pop() {
+                        Some(ReprCTStackVal(repr)) => {
+                            let id = Id(*label, fresh_id);
+                            let t = VarType(id, repr.clone());
+                            compile_time_stack.push(TypeCTStackVal(t));
+                            type_vars.push(id);
+                            kind_context.push(TypeKindContextEntry(id, repr));
+                            fresh_id += 1
+                        }
+                        Some(ctval) => return Err(KindError(pos, *op, ReprKind, ctval)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
+                    }
                 }
                 SomeOp => {
-                    let id = Id(*label, fresh_id);
-                    compile_time_stack.push(TypeCTStackVal(VarType(id)));
-                    exist_stack.push(id);
-                    fresh_id += 1;
+                    match compile_time_stack.pop() {
+                        Some(ReprCTStackVal(repr)) => {
+                            let id = Id(*label, fresh_id);
+                            compile_time_stack.push(TypeCTStackVal(VarType(id, repr.clone())));
+                            exist_stack.push((id, repr));
+                            fresh_id += 1;
+                        }
+                        Some(ctval) => return Err(KindError(pos, *op, ReprKind, ctval)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
+                    }
                 }
                 EmosOp => {
                     let mb_var = exist_stack.pop();
                     match mb_var {
                         None => return Err(TypeErrorEmptyExistStack(pos, *op)),
-                        Some(id) => {
+                        Some((id, repr)) => {
                             let mb_type = compile_time_stack.pop();
                             match mb_type {
                                 Some(TypeCTStackVal(t)) => compile_time_stack
-                                    .push(TypeCTStackVal(ExistsType(id, Box::new(t)))),
+                                    .push(TypeCTStackVal(ExistsType(id, repr, Box::new(t)))),
                                 Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
                                 None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                             }
@@ -320,7 +338,7 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     let mb_existential = stack_type.pop_back();
                     match mb_existential {
                         Some(t) => match t {
-                            ExistsType(_id, t) => {
+                            ExistsType(_id, _repr, t) => {
                                 stack_type.push_back(*t) // simply remove the quantifier, unbinding its variable
                             }
                             _ => return Err(TypeErrorExistentialExpected(pos, t)),
@@ -339,10 +357,10 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     }
                     let mut offset = 0;
                     for j in 0..*i {
-                        offset += get_size(&stack_type[stack_len - 1 - (j as usize)].clone());
+                        offset += get_size(&get_repr(&stack_type[stack_len - 1 - (j as usize)]));
                     }
                     let t = stack_type.get(stack_len - 1 - i2).unwrap().clone();
-                    let size = get_size(&t);
+                    let size = get_size(&get_repr(&t));
                     stack_type.push_back(t);
                     verified_ops.push(VerifiedOpcode::GetOp(offset, size));
                 }
@@ -373,7 +391,7 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                                             stack_type.push_back(tpl);
                                             let mut offset = 0;
                                             for i2 in 0..*i {
-                                                offset += get_size(&component_types[i2 as usize])
+                                                offset += get_size(&get_repr(&component_types[i2 as usize]))
                                             }
                                             verified_ops.push(VerifiedOpcode::InitOp(offset));
                                         } else {
@@ -414,7 +432,7 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                         }
                         None => return Err(TypeErrorEmptyStack(pos, *op)),
                     }
-                    let size = get_size(&t);
+                    let size = get_size(&get_repr(&t));
                     stack_type.push_back(t);
                     verified_ops.push(VerifiedOpcode::MallocOp(size));
                 }
@@ -439,7 +457,7 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                                         }
                                         let mut offset = 0;
                                         for i2 in 0..*i {
-                                            offset += get_size(&component_types[i2 as usize]);
+                                            offset += get_size(&get_repr(&component_types[i2 as usize]));
                                         }
                                         stack_type.push_back(t.clone());
                                         verified_ops.push(VerifiedOpcode::ProjOp(offset))
@@ -510,12 +528,15 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                             match compile_time_stack.pop() {
                                 Some(TypeCTStackVal(hidden_type)) => 
                                     match compile_time_stack.pop() {
-                                        Some(TypeCTStackVal(ExistsType(id, existential_type))) => {
+                                        Some(TypeCTStackVal(ExistsType(id, hidden_repr, existential_type))) => {
                                             let unpacked_type = substitute_t(&existential_type, &HashMap::from([(id, hidden_type)]), &HashMap::new(), &HashMap::new());
                                             if !type_eq(&hidden_vals_type, &unpacked_type, &capability_bounds) {
                                                 return Err(TypeError(pos, *op, unpacked_type, hidden_vals_type));
                                             }
-                                            stack_type.push_back(dbg!(ExistsType(id, existential_type)));
+                                            if hidden_repr != get_repr(&hidden_vals_type) {
+                                                return Err(RepresentationError(pos, *op, hidden_repr, get_repr(&hidden_vals_type)));
+                                            }
+                                            stack_type.push_back(ExistsType(id, hidden_repr, existential_type));
                                         }
                                         Some(TypeCTStackVal(t)) => return Err(TypeErrorExistentialExpected(pos, t)),
                                         Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
@@ -526,6 +547,9 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                             }
                         None => return Err(TypeErrorEmptyStack(pos, *op)),
                     }
+                }
+                Word32Op => {
+                    compile_time_stack.push(ReprCTStackVal(Repr::Word32Repr));
                 }
             },
         }
@@ -563,17 +587,13 @@ pub fn second_pass(constraints: Constraints, types: &HashMap<Label, Type>) -> Re
     Ok(())
 }
 
-fn get_size(t: &Type) -> usize {
-    match t {
-        I32Type => 1, // 32-bit int
-        HandleType(_) => 2, // 64-bit pointer
-        MutableType(t) => get_size(t),
-        ArrayType(_) => 4, // 128-bit fat pointer (no unboxed arrays yet)
-        VarType(_) => 2, // 128-bit pointer (TODO: kinds-are-calling-conventions polymorphism)
-        TupleType(_, _) => 4, // 128-bit fat pointer (TODO: kinds-are-calling-conventions polymorphism)
-        ExistsType(_, t) => get_size(t),
-        FuncType(_,_,_) => 1, // 32-bit jump label
-        GuessType(_) => panic!("GuessType in get_size"),
+fn get_size(r: &Repr) -> usize {
+    match r {
+        Repr::Word32Repr => 1,
+        Repr::Word64Repr => 2,
+        Repr::PtrRepr(_) => 4,
+        Repr::ArrayRepr(_) => panic!("get_size called on array repr"),
+        Repr::TupleRepr(reprs) => reprs.iter().map(get_size).sum(),
     }
 }
 
@@ -636,8 +656,11 @@ fn get_substitutions(
                     ))
                 }
             },
-            TypeKindContextEntry(id) => match actual {
+            TypeKindContextEntry(id, repr) => match actual {
                 CTStackVal::TypeCTStackVal(t) => {
+                    if repr != get_repr(&t) {
+                        return Err(RepresentationErrorBadInstantiation(pos, repr, get_repr(&t)));
+                    }
                     type_assignments.insert(id, t.clone());
                 }
                 ctval => {
@@ -646,42 +669,13 @@ fn get_substitutions(
                         TypeKind,
                         ctval.clone(),
                     ))
-                } // kind error- instantiated type var with a nontype
+                }
             },
         }
     }
     // then check that the parameter types match the top of the stack type
     Ok((rgn_assignments, cap_assignments, type_assignments))
 }
-
-/// Check if one capability is a subcapability of another.
-// fn cap_subtype(
-//     cap1: &Capability,
-//     cap2: &Capability,
-//     cap_bounds: &HashMap<Id, Vec<Capability>>,
-// ) -> bool {
-//     match (cap1, cap2) {
-//         (UniqueCap(r1), UniqueCap(r2)) if r1 == r2 => true,
-//         (UniqueCap(r1), ReadWriteCap(r2)) if r1 == r2 => true,
-//         (ReadWriteCap(r1), ReadWriteCap(r2)) if r1 == r2 => true,
-//         (ReadWriteCap(_), UniqueCap(_)) => false,
-//         (VarCap(id1), VarCap(id2)) if id1 == id2 => true,
-//         (VarCap(id), cap2) => {
-//             let bound = cap_bounds.get(id).unwrap();
-//             caps_satisfy_cap(bound, cap2, cap_bounds)
-//         }
-//         _ => false,
-//     }
-// }
-
-// /// Check if a capability set is sufficient to satisfy a given capability.
-// fn caps_satisfy_cap(
-//     caps: &[Capability],
-//     cap: &Capability,
-//     cap_bounds: &HashMap<Id, Vec<Capability>>,
-// ) -> bool {
-//     caps.iter().any(|c_p| cap_subtype(c_p, cap, cap_bounds))
-// }
 
 /// Check if a capability set is sufficient to satisfy another capability set.
 // This function is subtle because capabilities are relevant; that is, they cannot be forgotten.
@@ -796,10 +790,10 @@ pub fn substitute_t(
                 .collect(),
             substitute_r(r, rsubs),
         ),
-        Type::ArrayType(t) => Type::ArrayType(Box::new(substitute_t(t, tsubs, rsubs, csubs))),
-        Type::VarType(id) => match tsubs.get(id) {
+        Type::ArrayType(t, r) => Type::ArrayType(Box::new(substitute_t(t, tsubs, rsubs, csubs)), *r),
+        Type::VarType(id, repr) => match tsubs.get(id) {
             Some(new) => new.clone(),
-            None => Type::VarType(*id),
+            None => Type::VarType(*id, repr.clone()),
         },
         Type::FuncType(kind_context, caps, args) => Type::FuncType(
             kind_context.clone(),
@@ -808,8 +802,8 @@ pub fn substitute_t(
                 .map(|t| substitute_t(t, tsubs, rsubs, csubs))
                 .collect(),
         ),
-        Type::ExistsType(x, t) => {
-            Type::ExistsType(*x, Box::new(substitute_t(t, tsubs, rsubs, csubs)))
+        Type::ExistsType(x, repr, t) => {
+            Type::ExistsType(*x, repr.clone(), Box::new(substitute_t(t, tsubs, rsubs, csubs)))
         }
         Type::GuessType(label) => Type::GuessType(*label),
     }
@@ -868,8 +862,8 @@ pub fn type_eq(type1: &Type, type2: &Type, cap_bounds: &HashMap<Id, Vec<Capabili
                 return true;
             }
         }
-        (Type::ArrayType(t1), Type::ArrayType(t2)) => type_eq(t1, t2, cap_bounds),
-        (Type::VarType(id1), Type::VarType(id2)) => id1 == id2,
+        (Type::ArrayType(t1, r1), Type::ArrayType(t2, r2)) => r1 == r2 && type_eq(t1, t2, cap_bounds),
+        (Type::VarType(id1, repr1), Type::VarType(id2, repr2)) => id1 == id2 && repr1 == repr2,
         (Type::FuncType(kind_context1, caps1, ts1), Type::FuncType(kind_context2, caps2, ts2)) => {
             if kind_context1.len() != kind_context2.len() {
                 return false;
@@ -895,8 +889,11 @@ pub fn type_eq(type1: &Type, type2: &Type, cap_bounds: &HashMap<Id, Vec<Capabili
                     (RegionKindContextEntry(id1), RegionKindContextEntry(id2)) => {
                         rgn_assignments.insert(*id2, Region::VarRgn(*id1));
                     }
-                    (TypeKindContextEntry(id1), TypeKindContextEntry(id2)) => {
-                        type_assignments.insert(*id2, Type::VarType(*id1));
+                    (TypeKindContextEntry(id1, repr1), TypeKindContextEntry(id2, repr2)) => {
+                        if repr1 != repr2 {
+                            return false;
+                        }
+                        type_assignments.insert(*id2, Type::VarType(*id1, repr1.clone()));
                     }
                     _ => return false,
                 }
@@ -918,11 +915,11 @@ pub fn type_eq(type1: &Type, type2: &Type, cap_bounds: &HashMap<Id, Vec<Capabili
             }
             return true;
         }
-        (Type::ExistsType(id1, t1), Type::ExistsType(id2, t2)) => {
+        (Type::ExistsType(id1, repr1, t1), Type::ExistsType(id2, repr2, t2)) => {
             let mut sub = HashMap::new();
-            sub.insert(*id2, Type::VarType(*id1));
+            sub.insert(*id2, Type::VarType(*id1, repr1.clone()));
             let t2_subbed = substitute_t(t2, &sub, &HashMap::new(), &HashMap::new());
-            type_eq(t1, &t2_subbed, cap_bounds)
+            repr1 == repr2 && type_eq(t1, &t2_subbed, cap_bounds)
         }
         (Type::GuessType(label1), Type::GuessType(label2)) => label1 == label2,
         (_, _) => false,

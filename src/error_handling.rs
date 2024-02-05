@@ -168,6 +168,23 @@ pub fn handle(res: Result<(), Error>) {
             TypeErrorMainHasArgs => {
                 println!("Type error! The entrypoint function cannot require arguments.")
             }
+            RepresentationError(pos, op, expected, found) => {
+                println!(
+                    "Representation error! `{}` expected a `{}`, but it is receiving a `{}`.\n[{}]",
+                    pretty::unverified_op(op),
+                    pretty::representation(&expected),
+                    pretty::representation(&found),
+                    pos
+                )
+            }
+            RepresentationErrorBadInstantiation(pos, expected, found) => {
+                println!(
+                    "Representation error! A type variable with a `{}` representation is being instantiated with a type with a `{}` representation.\n[{}]",
+                    pretty::representation(&expected),
+                    pretty::representation(&found),
+                    pos
+                )
+            }
         },
         Ok(()) => (),
     }
