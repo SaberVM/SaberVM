@@ -49,31 +49,31 @@ For example, if you prefer a `Result`-style exception handling, you can write fu
 
 ### The progress so far
 
-Currently work is underway on an MVP, that is, a simple non-JITing VM in Rust. Like Wasm, SaberVM bytecode must be verified before it is run. The project so far can parse an array of bytes and typecheck most[^1] of it, which I expect to be harder than writing the runtime stuff. Thankfully, SaberVM has been designed to be easy to implement, so that languages targeting it can easily extend the number of platforms they support. This means the MVP has been very fast to write, with only three real days of work at the time of writing. 
+Currently work is underway on an MVP, that is, a simple non-JITing VM in Rust. Like Wasm, SaberVM bytecode must be verified before it is run. The project so far can parse an array of bytes, typecheck it, and execute it, but only supports a small subset of the full SaberVM design. Thankfully, SaberVM has been designed to be easy to implement, so that languages targeting it can easily extend the number of platforms they support. Indeed, design took about a month but development has gone extremely swiftly so far, with about a week of full-time work for one person so far (but it wasn't actually a contiguous week).
 
-[^1]: The type checker uses a two-pass system exploiting the structure of CPS code. The first pass can determine the type of the function without knowing the types of any other functions. The second pass uses the types of all the functions to typecheck the calls at the end of the functions. This design is easy to implement and very parallel, though I haven't parallelized it yet because it's just an MVP.
+The type checker uses a two-pass system exploiting the structure of CPS code. The first pass can determine the type of the function without knowing the types of any other functions, allowing trivial parallelism. The second pass uses the types of all the functions to verify the calls at the end of the functions. This design is easy to implement and very fast, though I haven't parallelized it yet because it's just an MVP.
 
-There are 27 instructions implemented so far, which I believe includes all the compile-time instructions of the MVP (21). The only 6 runtime instructions were chosen so I could typecheck a simple "duplicate" function. In a high-level language this might look like so:
+There are 36 instructions implemented so far, which I believe includes all the compile-time instructions of the MVP (21). The only 11 runtime instructions were chosen so I could execute a simple "duplicate" function. In a high-level language this might look like so:
 
 ```
 foo x = (x, x)
 ```
 
-In SaberVM this is 73 bytes of one- and two-byte instructions, mostly because this function has a very rich type:
+In SaberVM this is about 70 bytes of one- and two-byte instructions, excluding 4-byte literals, mostly because this function has a very rich type:
 
 ```
-Forall r: Rgn, c≤{+r}: Cap, t: Typ. [c](t, Exists u. ([c](u, (t, t)@r)->0, u)@r, handle(r))->0
+Forall r: Rgn, c≤{+r}: Cap, t: Type. [c](t, Exists u. ([c](u, (t, t)@r)->0, u)@r, handle(r))->0
 ```
 
-To pick this apart a little, the function is quantified over a region, a capability that must at least be able to read and write into the region, and a type. `[C](a..)->0` is the syntax for a function type that can only be called when capability `C` is satisfied, and it takes the arguments `a..`. The `->0` notation is to suggest that it's a CPS function, and therefore doesn't return. `{+r}` is a capability to use pointers into region `r`, but it doesn't grant the ability to free `r`. You can imagine that `r` is borrowed, if you're familiar with Rust. `Exists x. t` is an existential type, and is mostly used for typing closures. In this case, the continuation is existentially quantified so that it could have any closure environment struct. That is, a closure is typed at `Exists x. ([C](x, a..)->0, x)@R`. The `(a..)@R` notation is product types (tuples) that are allocated in region `R`. Finally, `handle(R)` is the singleton type for the runtime information of a region `R`, holding for example the pointer to the physical region in memory.
+To pick this apart a little, the function is quantified over a region, a capability that must at least be able to read and write into the region, and a type. `[C](a..)->0` is the syntax for a function type that can only be called when capability `C` is satisfied, and it takes the arguments `a..`. The `->0` notation is to suggest that it's a CPS function, and therefore doesn't return. `{+r}` is a capability to use pointers into region `r`, but it doesn't grant the ability to free `r`. You can imagine that `r` is borrowed, if you're familiar with Rust. `Exists x. t` is an existential type, and is mostly used for typing closure environments. In this case, the continuation is existentially quantified so that it could have any closure environment struct. That is, a closure is typed at `Exists x. ([C](x, a..)->0, x)@R`. The `(a..)@R` notation is product types (tuples) that are allocated in region `R`. Finally, `handle(R)` is the singleton type for the runtime information of a region `R`, holding for example the pointer to the physical region in memory.
 
 In summary, that type says that the function takes a value of type `t`, a region `r`, and a continuation that expects a value of type `(t, t)` allocated in region `r`. It also requires that `r` hasn't been freed. That should seem like a reasonable type for the duplicate function. The richness of the information present in the type should hopefully justify how many compile-time instructions are used to construct it. Resorting too much to type inference would hurt the performance of the verifier asymptotically, so in the tradeoff between binary size and verifier performance I chose a faster verifier. One- and two-byte instructions helps the binary size a lot already.
 
-To see how writing these 70ish bytes looks in practice, go to [example.md](https://github.com/RyanBrewer317/SaberVM/blob/main/example.md) for the example. Note that it also outputs the instructions the VM will execute, with the compile-time stuff all erased.
+To see how writing these 70ish bytes looks in practice, go to [example.md](https://github.com/RyanBrewer317/SaberVM/blob/main/example.md) for the example. Note that it also outputs the instructions the VM will execute, with the compile-time stuff all erased. To turn `example.md` into bytecode, I have another project [here](https://github.com/RyanBrewer317/SaberVM-Text-Lang). SaberVM can't quite execute this right now because of a bug in the memory management instructions, but programs that don't use malloc/init/proj instructions run great.
 
 This is very WIP; the purpose of this MVP is not to ship it per se, but mostly to play with the system and figure out what breaking changes need to be made. 
 
-I haven't decided how to handle polymorphism quite yet, because I hope to support nonuniform memory representations and unboxed data. I may surface this to the user in the Kinds Are Calling Conventions approach, or I might go for a Morrisett/Sixten approach by passing around size data for polymorphic values (which would not be surfaced to the user). I may also do a combination of both, for more expressivity. We'll see. I probably won't go the full-monomorphization route, as separate compilation is important to me down the road.
+Polymorphism is currently just done in a simple Kinds-Are-Calling-Conventions approach.
 
 ### Sponsors
 
