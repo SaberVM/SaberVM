@@ -139,6 +139,8 @@ void push_val_64(u32 stack[1024], u32 *sp, u64 value) {
 
 void handle_init(u32 stack[], u32 *sp, size_t offset, size_t size);
 
+extern uint8_t vm_function(u32 instrs[], size_t instrs_len);
+
 uint8_t vm_function(u32 instrs[], size_t instrs_len) {
     for (u32 i = 0; i < instrs_len; i++) {
         dbg(" %d", instrs[i]);
