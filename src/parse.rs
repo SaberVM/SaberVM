@@ -179,7 +179,7 @@ mod tests {
     fn test_lex_bad() {
         let input = vec![0x00, 0x00, 0x00, 0x00, 0x12];
         let output = parse::lex(&input);
-        assert_eq!(Err(SyntaxErrorParamNeeded(0, 0x12)), output);
+        assert_eq!(Err(SyntaxErrorParamNeeded(4, 0x12)), output);
     }
 
     #[test]
@@ -189,13 +189,13 @@ mod tests {
         let output = parse::parse(&input);
 
         let Some(stmt1) = output.get(0) else { panic!() };
-        let UnverifiedStmt::Func(4, ops1) = stmt1 else {
+        let UnverifiedStmt::Func(0, ops1) = stmt1 else {
             panic!()
         };
         assert!(ops1.len() == 1);
 
         let Some(stmt2) = output.get(1) else { panic!() };
-        let UnverifiedStmt::Func(5, ops2) = stmt2 else {
+        let UnverifiedStmt::Func(2, ops2) = stmt2 else {
             panic!()
         };
         assert!(ops2.len() == 1);

@@ -24,6 +24,8 @@ An easy and very valuable way to start contributing to SaberVM is to add some te
 We definitely need way more. 
 Check out the end of [parse.rs](src/parse.rs) for a good example of how to add a new test.
 
+If you just want to run the tests, simply run the command `cargo test`.
+
 ### Building From Source
 
 Here's a little section about getting the SaberVM codebase to run on your machine.
@@ -56,5 +58,17 @@ This means a fair amount of the other constraints ought to be reached via advanc
 
 Another constraint is **safety**. VMs like SaberVM are much more useful if they can be made safe, as this is one of the reasons people use VMs instead of running code natively. The JVM is used to run untrusted software by constraining memory access and using garbage collection, so all memory usage is safe. The WebAssembly VM is used to run untrusted code by sandboxing the runtime, though it has no safety for its own memory. 
 
-SaberVM achieves memory safety without sandboxing or garbage collection, using static analysis. The theory could be explained with category theory using comonads, though it's much simpler to just explain it in normal words. The idea is simple: when you do something with memory in your function, the function must be annotated with the fact that it needs that memory to be accessable. For example, it shouldn't be possible to free the memory and then call that function that touches it. These constraints bubble up: if your function `fun1` calls another function `fun2`, then the annotations of `fun1` have to satisfy the annotations of `fun2`. Fun, right? :) These annotations are called "capabilities," because they grant the *capability* to access the memory. I wrote more about the idea (and its original paper) in much more detail [here](https://ryanbrewer.dev/posts/safe-mmm-with-coeffects.html).
+SaberVM achieves memory safety without sandboxing or garbage collection, using two mechanisms. The primary one is generational references, as found in [Vale](https://vale.dev). This causes a microcrash when an attempt is made to read, write to, or free memory that's already been freed. The second mechanism is a static analysis, that is, a compile-time check. These compile-time checks are important for avoiding memory fragmentation, and introduce "regions," which offer performance improvements when used well. The lack of sandboxing and garbage collection is important for allowing the VM to use fewer resources and increasing the number of contexts in which it can be used. 
+
+The theory behind the compile-time region checking could be explained with category theory using comonads, but it's much simpler to just explain it in normal words. The idea is simple: when you do something with memory from a region in your function, the function must be annotated with the fact that it needs that region to be accessable. For example, it shouldn't be possible to free the region and then call that function that touches it. These constraints bubble up through the code: if your function `fun1` calls another function `fun2`, then the annotations of `fun1` have to satisfy the annotations of `fun2`. Fun, right? :) These annotations are called "capabilities," because they grant the *capability* to access the memory. As simple as the idea sounds, there are important caveats to make it actually work in practice. I wrote about the idea (and its original paper) in much more detail [here](https://ryanbrewer.dev/posts/safe-mmm-with-coeffects.html).
+
+todo: reliability (microcrash recovery)
+
+todo: expressivity (static analysis doesn't change how you compile to it, unless you try to do fancy things)
+
+todo: performance (AOT-compilation, fast-mode vs safe-mode, JIT-compilation)
+
+### Tradeoffs
+
+todo (there are a bunch of interesting ones, which are occasionally fairly opinionated)
 
