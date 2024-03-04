@@ -18,6 +18,20 @@
             ]
         },
         {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [],
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-clang-x64",
+            "compilerPath": "/usr/bin/clang",
+            "compilerArgs": [
+                "-stdlib=libc"
+            ]
+        },
+        {
             "name": "Windows",
             "includePath": [
                 "${workspaceFolder}/**"
