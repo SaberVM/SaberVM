@@ -89,6 +89,8 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
     let mut compile_time_stack: CTStackType = vec![];
     let mut stack_type: StackType = VecDeque::from([]);
     let mut exist_stack: Vec<(Id, Repr)> = vec![];
+    let mut forall_stack: Vec<(Id, Repr)> = vec![];
+    let mut rgn_var_stack: Vec<Id> = vec![];
 
     // The types the function expects the top of the stack to have.
     let mut arg_types: Vec<Type> = vec![];
@@ -605,12 +607,72 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                         None => return Err(TypeErrorEmptyStack(pos, *op)),
                     }
                 }
+                ForallOp => {
+                    match compile_time_stack.pop() {
+                        Some(ReprCTStackVal(repr)) => {
+                            let id = Id(*label, fresh_id);
+                            compile_time_stack.push(TypeCTStackVal(VarType(id, repr.clone())));
+                            forall_stack.push((id, repr));
+                            fresh_id += 1;
+                        }
+                        Some(ctval) => return Err(KindError(pos, *op, ReprKind, ctval)),
+                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
+                    }
+                }
+                LlarofOp => {
+                    let mb_var = forall_stack.pop();
+                    match mb_var {
+                        None => return Err(TypeErrorEmptyForallStack(pos, *op)),
+                        Some((id, repr)) => {
+                            let mb_type = compile_time_stack.pop();
+                            match mb_type {
+                                Some(TypeCTStackVal(FuncType(mut ctx, caps, argts))) => {
+                                    ctx.push(TypeKindContextEntry(id, repr));
+                                    compile_time_stack.push(TypeCTStackVal(FuncType(ctx, caps, argts)));
+                                }
+                                Some(TypeCTStackVal(t)) => return Err(TypeErrorPolymorphicNonFunc(pos, *op, t)),
+                                Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
+                                None => return Err(TypeErrorEmptyCTStack(pos, *op)),
+                            }
+                        }
+                    }
+                }
+                RgnPolyOp => {
+                    let id = Id(*label, fresh_id);
+                    compile_time_stack.push(RegionCTStackVal(VarRgn(id)));
+                    rgn_var_stack.push(id);
+                    fresh_id += 1;
+                }
+                YlopNgrOp => {
+                    let mb_var = rgn_var_stack.pop();
+                    match mb_var {
+                        None => return Err(TypeErrorEmptyForallStack(pos, *op)),
+                        Some(id) => {
+                            let mb_type = compile_time_stack.pop();
+                            match mb_type {
+                                Some(TypeCTStackVal(FuncType(mut ctx, caps, argts))) => {
+                                    ctx.push(RegionKindContextEntry(id));
+                                    compile_time_stack.push(TypeCTStackVal(FuncType(ctx, caps, argts)));
+                                }
+                                Some(TypeCTStackVal(t)) => return Err(TypeErrorPolymorphicNonFunc(pos, *op, t)),
+                                Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
+                                None => return Err(TypeErrorEmptyCTStack(pos, *op)),
+                            }
+                        }
+                    }
+                }
             },
         }
         pos += 1;
     }
     if exist_stack.len() > 0 {
         return Err(TypeErrorNonEmptyExistStack(*label));
+    }
+    if forall_stack.len() > 0 {
+        return Err(TypeErrorNonEmptyForallStack(*label));
+    }
+    if rgn_var_stack.len() > 0 {
+        return Err(TypeErrorNonEmptyRgnVarStack(*label));
     }
     let t = FuncType(kind_context, cap_coeffect, arg_types);
     Ok((VerifiedStmt::Func(*label, t, verified_ops), constraints))

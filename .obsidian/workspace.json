@@ -147,8 +147,19 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "e62fe55fe5052189",
+  "active": "ac0cbe8a137ea700",
   "lastOpenFiles": [
+    "target/debug/incremental/sabervm-fw74zsx4vhbh/s-gu0g1a2y0n-1w8zobh-c0ku3zpu59viw201biiu01m0b/work-products.bin",
+    "target/debug/incremental/sabervm-fw74zsx4vhbh/s-gu0g1a2y0n-1w8zobh-c0ku3zpu59viw201biiu01m0b/query-cache.bin",
+    "target/debug/incremental/sabervm-fw74zsx4vhbh/s-gu0g1a2y0n-1w8zobh-c0ku3zpu59viw201biiu01m0b/dep-graph.bin",
+    "target/debug/incremental/sabervm-fw74zsx4vhbh/s-gu0g1a2y0n-1w8zobh-c0ku3zpu59viw201biiu01m0b",
+    "target/debug/incremental/sabervm-228n6xjnvlxjl/s-gu0g1a2y0n-1gxog0p-4k4p9v0vutub5xjyelsihu5ep/work-products.bin",
+    "target/debug/incremental/sabervm-228n6xjnvlxjl/s-gu0g1a2y0n-1gxog0p-4k4p9v0vutub5xjyelsihu5ep/query-cache.bin",
+    "target/debug/incremental/sabervm-228n6xjnvlxjl/s-gu0g1a2y0n-1gxog0p-4k4p9v0vutub5xjyelsihu5ep/dep-graph.bin",
+    "target/debug/incremental/sabervm-228n6xjnvlxjl/s-gu0g1a2y0n-1gxog0p-4k4p9v0vutub5xjyelsihu5ep",
+    "target/debug/incremental/sabervm-228n6xjnvlxjl/s-gu0g1a2y0n-1gxog0p-working/dep-graph.part.bin",
+    "target/debug/incremental/sabervm-fw74zsx4vhbh/s-gu0g1a2y0n-1w8zobh-working/work-products.bin",
+    "target/debug/incremental/sabervm-fw74zsx4vhbh/s-gu0g1a2y0n-1w8zobh-working/query-cache.bin",
     "README.md"
   ]
 }

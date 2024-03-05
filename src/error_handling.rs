@@ -193,6 +193,27 @@ pub fn handle(res: Result<(), Error>) {
                     pos
                 )
             }
+            TypeErrorEmptyForallStack(pos, op) => {
+                println!(
+                    "Type error! `{}` is trying to use the forall stack, but at this point the forall stack has nothing in it.\n[{}]", 
+                    pretty::unverified_op(op),
+                    pos
+                )
+            }
+            TypeErrorPolymorphicNonFunc(pos, op, t) => {
+                println!(
+                    "Type error! `{}` is trying to produce a polymorphic type, but only function types can be polymorphic, and it's receiving a non-function type `{}`.\n[{}]",
+                    pretty::unverified_op(op),
+                    pretty::typ(&t),
+                    pos
+                )
+            }
+            TypeErrorNonEmptyForallStack(label) => {
+                println!("Type error! At the end of the function there are still unbound universal quantification variables.\n[{}]", label)
+            }
+            TypeErrorNonEmptyRgnVarStack(label) => {
+                println!("Type error! At the end of the function there are still unbound region variables.\n[{}]", label)
+            }
         },
         Ok(()) => (),
     }

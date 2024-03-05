@@ -121,6 +121,10 @@ fn lex(bytes: &ByteStream) -> Result<LexedOpcodes, Error> {
                 }
                 0x23 => NewRgnOp,
                 0x24 => FreeRgnOp,
+                0x25 => ForallOp,
+                0x26 => LlarofOp,
+                0x27 => RgnPolyOp,
+                0x28 => YlopNgrOp,
                 op => return Err(SyntaxErrorUnknownOp(pos, *op)),
             }),
         }

@@ -54,6 +54,10 @@ pub enum UnverifiedOpcode {
     ReprsOp(OpParam),  // 0x22
     NewRgnOp,          // 0x23
     FreeRgnOp,         // 0x24
+    ForallOp,          // 0x25
+    LlarofOp,          // 0x26
+    RgnPolyOp,         // 0x27
+    YlopNgrOp,         // 0x28
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -227,4 +231,8 @@ pub enum Error {
     RepresentationError(Pos, UnverifiedOpcode, Expected<Repr>, Found<Repr>),
     RepresentationErrorBadInstantiation(Pos, Expected<Repr>, Found<Repr>),
     TypeErrorHandleExpected(Pos, UnverifiedOpcode, Type),
+    TypeErrorEmptyForallStack(Pos, UnverifiedOpcode),
+    TypeErrorPolymorphicNonFunc(Pos, UnverifiedOpcode, Type),
+    TypeErrorNonEmptyForallStack(Label),
+    TypeErrorNonEmptyRgnVarStack(Label),
 }

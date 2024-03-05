@@ -18,24 +18,24 @@ use crate::header::Type;
 use crate::header::Type::*;
 use crate::header::UnverifiedOpcode;
 use crate::header::UnverifiedOpcode::*;
-use crate::header::VerifiedOpcode;
+// use crate::header::VerifiedOpcode;
 
 /// Get a pretty string representation of a verified opcode.
-pub fn verified_op(op: &VerifiedOpcode) -> String {
-    match op {
-        VerifiedOpcode::GetOp(offset, size) => format!("get {} {}", offset, size),
-        VerifiedOpcode::InitOp(offset, size) => format!("init {} {}", offset, size),
-        VerifiedOpcode::MallocOp(size) => format!("malloc {}", size),
-        VerifiedOpcode::ProjOp(offset, size) => format!("proj {} {}", offset, size),
-        VerifiedOpcode::CallOp => "call".to_owned(),
-        VerifiedOpcode::PrintOp => "print".to_owned(),
-        VerifiedOpcode::LitOp(lit) => format!("lit {}", lit),
-        VerifiedOpcode::GlobalFuncOp(label) => format!("global {}", label),
-        VerifiedOpcode::HaltOp(code) => format!("halt {}", code),
-        VerifiedOpcode::NewRgnOp => "new_rgn".to_owned(),
-        VerifiedOpcode::FreeRgnOp => "free_rgn".to_owned(),
-    }
-}
+// pub fn verified_op(op: &VerifiedOpcode) -> String {
+//     match op {
+//         VerifiedOpcode::GetOp(offset, size) => format!("get {} {}", offset, size),
+//         VerifiedOpcode::InitOp(offset, size) => format!("init {} {}", offset, size),
+//         VerifiedOpcode::MallocOp(size) => format!("malloc {}", size),
+//         VerifiedOpcode::ProjOp(offset, size) => format!("proj {} {}", offset, size),
+//         VerifiedOpcode::CallOp => "call".to_owned(),
+//         VerifiedOpcode::PrintOp => "print".to_owned(),
+//         VerifiedOpcode::LitOp(lit) => format!("lit {}", lit),
+//         VerifiedOpcode::GlobalFuncOp(label) => format!("global {}", label),
+//         VerifiedOpcode::HaltOp(code) => format!("halt {}", code),
+//         VerifiedOpcode::NewRgnOp => "new_rgn".to_owned(),
+//         VerifiedOpcode::FreeRgnOp => "free_rgn".to_owned(),
+//     }
+// }
 
 /// Get a pretty string representation of a compile-time region value.
 pub fn region(r: Region) -> String {
@@ -159,6 +159,10 @@ pub fn op_u8(byte: u8) -> String {
         0x22 => "reprs",
         0x23 => "new_rgn",
         0x24 => "free_rgn",
+        0x25 => "forall",
+        0x26 => "llarof",
+        0x27 => "rgn_poly",
+        0x28 => "ylop_ngr",
         _ => panic!("unknown opcode {}", byte),
     })
     .to_owned()
@@ -204,6 +208,10 @@ pub fn unverified_op(op: UnverifiedOpcode) -> String {
         ReprsOp(n) => format!("reprs {}", n.to_string()),
         NewRgnOp => "new_rgn".to_owned(),
         FreeRgnOp => "free_rgn".to_owned(),
+        ForallOp => "forall".to_owned(),
+        LlarofOp => "llarof".to_owned(),
+        RgnPolyOp => "rgn_poly".to_owned(),
+        YlopNgrOp => "ngr_poly".to_owned(),
     }
 }
 
