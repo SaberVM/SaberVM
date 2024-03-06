@@ -70,7 +70,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 300,
+    "collapsed": true
   },
   "right": {
     "id": "d6c022d2482a3be1",
@@ -147,19 +148,19 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "ac0cbe8a137ea700",
+  "active": "e62fe55fe5052189",
   "lastOpenFiles": [
-    "target/debug/incremental/sabervm-fw74zsx4vhbh/s-gu0g1a2y0n-1w8zobh-c0ku3zpu59viw201biiu01m0b/work-products.bin",
-    "target/debug/incremental/sabervm-fw74zsx4vhbh/s-gu0g1a2y0n-1w8zobh-c0ku3zpu59viw201biiu01m0b/query-cache.bin",
-    "target/debug/incremental/sabervm-fw74zsx4vhbh/s-gu0g1a2y0n-1w8zobh-c0ku3zpu59viw201biiu01m0b/dep-graph.bin",
-    "target/debug/incremental/sabervm-fw74zsx4vhbh/s-gu0g1a2y0n-1w8zobh-c0ku3zpu59viw201biiu01m0b",
-    "target/debug/incremental/sabervm-228n6xjnvlxjl/s-gu0g1a2y0n-1gxog0p-4k4p9v0vutub5xjyelsihu5ep/work-products.bin",
-    "target/debug/incremental/sabervm-228n6xjnvlxjl/s-gu0g1a2y0n-1gxog0p-4k4p9v0vutub5xjyelsihu5ep/query-cache.bin",
-    "target/debug/incremental/sabervm-228n6xjnvlxjl/s-gu0g1a2y0n-1gxog0p-4k4p9v0vutub5xjyelsihu5ep/dep-graph.bin",
-    "target/debug/incremental/sabervm-228n6xjnvlxjl/s-gu0g1a2y0n-1gxog0p-4k4p9v0vutub5xjyelsihu5ep",
-    "target/debug/incremental/sabervm-228n6xjnvlxjl/s-gu0g1a2y0n-1gxog0p-working/dep-graph.part.bin",
-    "target/debug/incremental/sabervm-fw74zsx4vhbh/s-gu0g1a2y0n-1w8zobh-working/work-products.bin",
-    "target/debug/incremental/sabervm-fw74zsx4vhbh/s-gu0g1a2y0n-1w8zobh-working/query-cache.bin",
+    "target/debug/deps/sabervm-406442f8b0506343",
+    "target/debug/incremental/sabervm-16kqp1wpmom23/s-gu0uyva40h-1ogo6hc-dabfkq9dzqihm51xcgljg3fkw/yhqkda6yru618nq.o",
+    "target/debug/incremental/sabervm-16kqp1wpmom23/s-gu0uyva40h-1ogo6hc-dabfkq9dzqihm51xcgljg3fkw/y35q6uenq0ee05p.o",
+    "target/debug/incremental/sabervm-16kqp1wpmom23/s-gu0uyva40h-1ogo6hc-dabfkq9dzqihm51xcgljg3fkw/xl19pyjmd24kqvc.o",
+    "target/debug/incremental/sabervm-16kqp1wpmom23/s-gu0uyva40h-1ogo6hc-dabfkq9dzqihm51xcgljg3fkw/work-products.bin",
+    "target/debug/incremental/sabervm-16kqp1wpmom23/s-gu0uyva40h-1ogo6hc-dabfkq9dzqihm51xcgljg3fkw/ux101mwyr0r9qln.o",
+    "target/debug/incremental/sabervm-16kqp1wpmom23/s-gu0uyva40h-1ogo6hc-dabfkq9dzqihm51xcgljg3fkw/ujpmmrceuah0qb.o",
+    "target/debug/incremental/sabervm-16kqp1wpmom23/s-gu0uyva40h-1ogo6hc-dabfkq9dzqihm51xcgljg3fkw/tp6wtw3qa55dyct.o",
+    "target/debug/incremental/sabervm-16kqp1wpmom23/s-gu0uyva40h-1ogo6hc-dabfkq9dzqihm51xcgljg3fkw/sya36kwsb5enerk.o",
+    "target/debug/incremental/sabervm-16kqp1wpmom23/s-gu0uyva40h-1ogo6hc-dabfkq9dzqihm51xcgljg3fkw/sg6kxoy035c3u5g.o",
+    "target/debug/incremental/sabervm-16kqp1wpmom23/s-gu0uyva40h-1ogo6hc-dabfkq9dzqihm51xcgljg3fkw/rrizxytun5pnsxh.o",
     "README.md"
   ]
 }

@@ -565,13 +565,7 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     compile_time_stack.push(ReprCTStackVal(Repr::Word64Repr));
                 }
                 PtrOp => {
-                    match compile_time_stack.pop() {
-                        Some(ReprCTStackVal(repr)) => {
-                            compile_time_stack.push(ReprCTStackVal(Repr::PtrRepr(Box::new(repr))));
-                        }
-                        Some(ctval) => return Err(KindError(pos, *op, ReprKind, ctval)),
-                        None => return Err(TypeErrorEmptyCTStack(pos, *op))
-                    }
+                    compile_time_stack.push(ReprCTStackVal(Repr::PtrRepr));
                 }
                 ReprsOp(n) => {
                     let mut reprs = Vec::new();
@@ -707,8 +701,7 @@ fn get_size(r: &Repr) -> usize {
     match r {
         Repr::Word32Repr => WORD32_SIZE,
         Repr::Word64Repr => WORD64_SIZE,
-        Repr::PtrRepr(_) => PTR_SIZE,
-        Repr::ArrayRepr(_) => panic!("get_size called on array repr"),
+        Repr::PtrRepr => PTR_SIZE,
         Repr::TupleRepr(reprs) => reprs.iter().map(get_size).sum(),
     }
 }

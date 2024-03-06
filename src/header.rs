@@ -96,9 +96,8 @@ pub const PTR_SIZE: usize = 4;
 pub enum Repr {
     Word32Repr,
     Word64Repr,
-    PtrRepr(Box<Repr>),
+    PtrRepr,
     TupleRepr(Vec<Repr>),
-    ArrayRepr(Box<Repr>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -161,8 +160,8 @@ pub fn get_repr(t: &Type) -> Repr {
         Type::I32Type => Repr::Word32Repr,
         Type::HandleType(_) => Repr::Word64Repr,
         Type::MutableType(t) => get_repr(t),
-        Type::TupleType(ts, _) => Repr::PtrRepr(Box::new(Repr::TupleRepr(ts.iter().map(get_repr).collect()))),
-        Type::ArrayType(t, _) => Repr::PtrRepr(Box::new(Repr::ArrayRepr(Box::new(get_repr(t))))),
+        Type::TupleType(_ts, _) => Repr::PtrRepr,
+        Type::ArrayType(_t, _) => Repr::PtrRepr,
         Type::VarType(_, r) => r.clone(),
         Type::FuncType(_, _, _) => Repr::Word32Repr,
         Type::ExistsType(_, _, t) => get_repr(&*t),

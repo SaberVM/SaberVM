@@ -230,8 +230,7 @@ pub fn representation(repr: &Repr) -> String {
     match repr {
         Repr::Word32Repr => "32bit".to_owned(),
         Repr::Word64Repr => "64bit".to_owned(),
-        Repr::PtrRepr(repr) => "Ptr(".to_owned() + &representation(repr) + ")",
-        Repr::ArrayRepr(repr) => "Arr(".to_owned() + &representation(repr) + ")",
+        Repr::PtrRepr => "ptr".to_owned(),
         Repr::TupleRepr(reprs) => "Tuple(".to_owned() + &reprs.iter().map(|r| representation(r)).collect::<Vec<_>>().join(", ") + ")"
     }
 }
