@@ -214,6 +214,22 @@ pub fn handle(res: Result<(), Error>) {
             TypeErrorNonEmptyRgnVarStack(label) => {
                 println!("Type error! At the end of the function there are still unbound region variables.\n[{}]", label)
             }
+            TypeErrorEmptyRgnVarStack(pos, op) => {
+                println!(
+                    "Type error! `{}` is trying to use the region variable stack, but at this point the region variable stack has nothing in it.\n[{}]",
+                    pretty::unverified_op(op),
+                    pos
+                )
+            }
+            RegionError(pos, op, expected, found) => {
+                println!(
+                    "Region error! `{}` expected a `{}`, but it is receiving a `{}`.\n[{}]",
+                    pretty::unverified_op(op),
+                    pretty::region(expected),
+                    pretty::region(found),
+                    pos
+                )
+            }
         },
         Ok(()) => (),
     }

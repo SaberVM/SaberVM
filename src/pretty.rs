@@ -110,7 +110,7 @@ pub fn typ(t: &Type) -> String {
             let body = "[".to_owned() + &caps(c) + "](" + &types(ts) + ")->0";
             quantification.to_owned() + &body
         }
-        GuessType(_) => panic!("type-checking artifact lasted too long"),
+        GuessType(l) => format!("Guess {}", l),
     }
 }
 

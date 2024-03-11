@@ -165,7 +165,7 @@ pub fn get_repr(t: &Type) -> Repr {
         Type::VarType(_, r) => r.clone(),
         Type::FuncType(_, _, _) => Repr::Word32Repr,
         Type::ExistsType(_, _, t) => get_repr(&*t),
-        Type::GuessType(_) => panic!("tried to get repr of GuessType"),
+        Type::GuessType(_) => Repr::Word64Repr,
     }
 }
 
@@ -234,4 +234,6 @@ pub enum Error {
     TypeErrorPolymorphicNonFunc(Pos, UnverifiedOpcode, Type),
     TypeErrorNonEmptyForallStack(Label),
     TypeErrorNonEmptyRgnVarStack(Label),
+    TypeErrorEmptyRgnVarStack(Pos, UnverifiedOpcode),
+    RegionError(Pos, UnverifiedOpcode, Expected<Region>, Found<Region>)
 }

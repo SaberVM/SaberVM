@@ -31,6 +31,7 @@ use crate::header::VerifiedStmt::*;
 use crate::header::PTR_SIZE;
 use crate::header::WORD32_SIZE;
 use crate::header::WORD64_SIZE;
+use core::panic;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
@@ -292,18 +293,23 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     }
                 }
                 EmosOp => {
-                    let mb_var = exist_stack.pop();
-                    match mb_var {
+                    match exist_stack.pop() {
                         None => return Err(TypeErrorEmptyExistStack(pos, *op)),
-                        Some((id, repr)) => {
-                            let mb_type = compile_time_stack.pop();
-                            match mb_type {
-                                Some(TypeCTStackVal(t)) => compile_time_stack
-                                    .push(TypeCTStackVal(ExistsType(id, repr, Box::new(t)))),
+                        Some((id, repr)) => 
+                            match compile_time_stack.pop() {
+                                Some(TypeCTStackVal(t)) => 
+                                    match compile_time_stack.pop() {
+                                        Some(TypeCTStackVal(VarType(id2, _))) if id == id2 => 
+                                            compile_time_stack.push(TypeCTStackVal(ExistsType(id, repr, Box::new(t)))),
+                                        Some(TypeCTStackVal(VarType(id2, repr2))) => return Err(TypeError(pos, *op, VarType(id, repr), VarType(id2, repr2))),
+                                        Some(TypeCTStackVal(t)) => return Err(TypeError(pos, *op, VarType(id, repr), t)),
+                                        Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
+                                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
+
+                                    }
                                 Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
                                 None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                             }
-                        }
                     }
                 }
                 FuncOp(num_args) => {
@@ -398,6 +404,14 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                                             ));
                                         }
                                         if formal == &actual {
+                                            stack_type.push_back(tpl);
+                                            let mut offset = 0;
+                                            for i2 in 0..*i {
+                                                offset += get_size(&get_repr(&component_types[i2 as usize]))
+                                            }
+                                            verified_ops.push(VerifiedOpcode::InitOp(offset, get_size(&get_repr(&actual))));
+                                        } else if let GuessType(_l) = actual {
+                                            // todo: add a new type of constraint for the second pass that says that the guess has to eventually match the formal here
                                             stack_type.push_back(tpl);
                                             let mut offset = 0;
                                             for i2 in 0..*i {
@@ -614,21 +628,25 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     }
                 }
                 LlarofOp => {
-                    let mb_var = forall_stack.pop();
-                    match mb_var {
+                    match forall_stack.pop() {
                         None => return Err(TypeErrorEmptyForallStack(pos, *op)),
-                        Some((id, repr)) => {
-                            let mb_type = compile_time_stack.pop();
-                            match mb_type {
-                                Some(TypeCTStackVal(FuncType(mut ctx, caps, argts))) => {
-                                    ctx.push(TypeKindContextEntry(id, repr));
-                                    compile_time_stack.push(TypeCTStackVal(FuncType(ctx, caps, argts)));
-                                }
+                        Some((id, repr)) => 
+                            match compile_time_stack.pop() {
+                                Some(TypeCTStackVal(FuncType(mut ctx, caps, argts))) => 
+                                    match compile_time_stack.pop() {
+                                        Some(TypeCTStackVal(VarType(id2, _))) if id == id2 => {
+                                            ctx.push(TypeKindContextEntry(id, repr));
+                                            compile_time_stack.push(TypeCTStackVal(FuncType(ctx, caps, argts)));
+                                        }
+                                        Some(TypeCTStackVal(VarType(id2, repr2))) => return Err(TypeError(pos, *op, VarType(id, repr), VarType(id2, repr2))),
+                                        Some(TypeCTStackVal(t)) => return Err(TypeError(pos, *op, VarType(id, repr), t)),
+                                        Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
+                                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
+                                    }
                                 Some(TypeCTStackVal(t)) => return Err(TypeErrorPolymorphicNonFunc(pos, *op, t)),
                                 Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
                                 None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                             }
-                        }
                     }
                 }
                 RgnPolyOp => {
@@ -638,21 +656,25 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     fresh_id += 1;
                 }
                 YlopNgrOp => {
-                    let mb_var = rgn_var_stack.pop();
-                    match mb_var {
-                        None => return Err(TypeErrorEmptyForallStack(pos, *op)),
-                        Some(id) => {
-                            let mb_type = compile_time_stack.pop();
-                            match mb_type {
-                                Some(TypeCTStackVal(FuncType(mut ctx, caps, argts))) => {
-                                    ctx.push(RegionKindContextEntry(id));
-                                    compile_time_stack.push(TypeCTStackVal(FuncType(ctx, caps, argts)));
-                                }
+                    match rgn_var_stack.pop() {
+                        None => return Err(TypeErrorEmptyRgnVarStack(pos, *op)),
+                        Some(id) => 
+                            match compile_time_stack.pop() {
+                                Some(TypeCTStackVal(FuncType(mut ctx, caps, argts))) => 
+                                    match compile_time_stack.pop() {
+                                        Some(RegionCTStackVal(VarRgn(id2))) if id == id2 => {
+                                            ctx.push(RegionKindContextEntry(id));
+                                            compile_time_stack.push(TypeCTStackVal(FuncType(ctx, caps, argts)));
+                                        }
+                                        Some(RegionCTStackVal(VarRgn(id2))) => return Err(RegionError(pos, *op, VarRgn(id), VarRgn(id2))),
+                                        Some(RegionCTStackVal(r)) => return Err(RegionError(pos, *op, VarRgn(id), r)),
+                                        Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
+                                        None => return Err(TypeErrorEmptyCTStack(pos, *op)),
+                                    }
                                 Some(TypeCTStackVal(t)) => return Err(TypeErrorPolymorphicNonFunc(pos, *op, t)),
                                 Some(ctval) => return Err(KindError(pos, *op, TypeKind, ctval)),
                                 None => return Err(TypeErrorEmptyCTStack(pos, *op)),
                             }
-                        }
                     }
                 }
             },
