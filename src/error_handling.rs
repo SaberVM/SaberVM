@@ -225,8 +225,8 @@ pub fn handle(res: Result<(), Error>) {
                 println!(
                     "Region error! `{}` expected a `{}`, but it is receiving a `{}`.\n[{}]",
                     pretty::unverified_op(op),
-                    pretty::region(expected),
-                    pretty::region(found),
+                    pretty::region(&expected),
+                    pretty::region(&found),
                     pos
                 )
             }

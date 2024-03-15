@@ -38,10 +38,10 @@ use crate::header::UnverifiedOpcode::*;
 // }
 
 /// Get a pretty string representation of a compile-time region value.
-pub fn region(r: Region) -> String {
+pub fn region(r: &Region) -> String {
     match r {
         Region::HeapRgn => "Heap".to_string(),
-        VarRgn(id) => "r".to_owned() + &id.0.to_string() + "_" + &id.1.to_string(),
+        VarRgn(id) => "r".to_owned() + &id.1.to_string(),
     }
 }
 
@@ -59,7 +59,7 @@ pub fn kind_context(kinds: &KindContext) -> String {
                     return prefix;
                 }
             }
-            RegionKindContextEntry(id) => "r".to_owned() + &id.0.to_string() + "_" + &id.1.to_string(),
+            RegionKindContextEntry(id) => "r".to_owned() + &id.1.to_string(),
             TypeKindContextEntry(id, repr) => "t".to_owned() + &id.0.to_string() + "_" + &id.1.to_string() + ": " + &representation(repr),
         })
         .collect::<Vec<_>>()
@@ -81,8 +81,8 @@ pub fn caps(cs: &Vec<Capability>) -> String {
 pub fn cap(c: Capability) -> String {
     match c {
         VarCap(id) => "c".to_owned() + &id.1.to_string(),
-        UniqueCap(r) => "1".to_owned() + &region(r),
-        ReadWriteCap(r) => "+".to_owned() + &region(r),
+        UniqueCap(r) => "1".to_owned() + &region(&r),
+        ReadWriteCap(r) => "+".to_owned() + &region(&r),
     }
 }
 
@@ -95,10 +95,10 @@ pub fn types(ts: &Vec<Type>) -> String {
 pub fn typ(t: &Type) -> String {
     match t {
         I32Type => "i32".to_string(),
-        HandleType(r) => "handle(".to_owned() + &region(*r) + ")",
+        HandleType(r) => "handle(".to_owned() + &region(r) + ")",
         MutableType(t) => "mut ".to_owned() + &typ(t),
-        TupleType(ts, r) => "(".to_owned() + &types(ts) + ")@" + &region(*r),
-        ArrayType(t, r) => "[".to_owned() + &typ(t) + "]@" + &region(*r),
+        TupleType(ts, r) => "(".to_owned() + &types(ts) + ")@" + &region(r),
+        ArrayType(t, r) => "[".to_owned() + &typ(t) + "]@" + &region(r),
         VarType(id, _repr) => "t".to_owned() + &id.1.to_string(),
         ExistsType(id, repr, t) => "Exists t".to_owned() + &id.1.to_string() + ": " + &representation(repr) + ". " + &typ(t),
         FuncType(kinds, c, ts) => {
@@ -232,5 +232,14 @@ pub fn representation(repr: &Repr) -> String {
         Repr::Word64Repr => "64bit".to_owned(),
         Repr::PtrRepr => "ptr".to_owned(),
         Repr::TupleRepr(reprs) => "Tuple(".to_owned() + &reprs.iter().map(|r| representation(r)).collect::<Vec<_>>().join(", ") + ")"
+    }
+}
+
+pub fn ctval(ctv: &CTStackVal) -> String {
+    match ctv {
+        CTStackVal::TypeCTStackVal(t) => typ(t),
+        CTStackVal::RegionCTStackVal(r) => region(r),
+        CTStackVal::CapCTStackVal(cs) => caps(cs),
+        CTStackVal::ReprCTStackVal(r) => representation(r),
     }
 }

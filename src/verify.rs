@@ -31,6 +31,7 @@ use crate::header::VerifiedStmt::*;
 use crate::header::PTR_SIZE;
 use crate::header::WORD32_SIZE;
 use crate::header::WORD64_SIZE;
+use crate::pretty;
 use core::panic;
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -127,7 +128,18 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
     let mut pos = *label;
 
     loop {
-        match ops_iter.next() {
+        let op = ops_iter.next();
+        if let Some(op) = op {
+            let op_str = pretty::unverified_op(*op);
+            print!(
+                "{}{}\t",
+                op_str,
+                if op_str.len() < 8 { "\t" } else { "" }
+            ); 
+        } else {
+            println!();
+        }
+        match op {
             None => break,
             Some(op) => match op {
                 ReqOp => match compile_time_stack.pop() {
@@ -415,7 +427,7 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                                             }
                                             verified_ops.push(VerifiedOpcode::InitOp(offset, get_size(&get_repr(&actual))));
                                         };
-                                        if formal == &actual {
+                                        if type_eq(formal, &actual, &capability_bounds) {
                                             success();
                                         } else if let GuessType(l) = actual {
                                             // todo: add a new type of constraint for the second pass that says that the guess has to eventually match the formal here
@@ -679,6 +691,13 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                 }
             },
         }
+        println!("{}", &stack_type
+            .iter()
+            .rev()
+            .map(pretty::typ)
+            .collect::<Vec<_>>()
+            .join(",")
+        );
         pos += 1;
     }
     if exist_stack.len() > 0 {
@@ -1034,6 +1053,7 @@ pub fn type_eq(type1: &Type, type2: &Type, cap_bounds: &HashMap<Id, Vec<Capabili
                         cap_assignments.insert(*id2, vec![Capability::VarCap(*id1)]);
                     }
                     (RegionKindContextEntry(id1), RegionKindContextEntry(id2)) => {
+                        dbg!(id2.1, id1.1);
                         rgn_assignments.insert(*id2, Region::VarRgn(*id1));
                     }
                     (TypeKindContextEntry(id1, repr1), TypeKindContextEntry(id2, repr2)) => {
@@ -1046,18 +1066,22 @@ pub fn type_eq(type1: &Type, type2: &Type, cap_bounds: &HashMap<Id, Vec<Capabili
                 }
             }
             let types_match = ts1.iter().zip(ts2.iter()).all(|(t1, t2)| {
+                let t2_subbed = substitute_t(t2, &type_assignments, &rgn_assignments, &cap_assignments);
+                dbg!(pretty::typ(&t1), pretty::typ(&t2_subbed));
                 type_eq(
-                    t1,
-                    &substitute_t(t2, &type_assignments, &rgn_assignments, &cap_assignments),
+                    &t1,
+                    &t2_subbed,
                     cap_bounds,
                 )
             });
             if !types_match {
                 return false;
             }
-            if !caps_satisfy_caps(caps1.to_vec(), caps2, cap_bounds)
-                || !caps_satisfy_caps(caps2.to_vec(), caps1, cap_bounds)
+            let caps2_subbed = substitute_c(caps2, &rgn_assignments, &cap_assignments);
+            if !caps_satisfy_caps(caps1.to_vec(), &caps2_subbed, cap_bounds)
+                || !caps_satisfy_caps(caps2_subbed.to_vec(), caps1, cap_bounds)
             {
+                println!("{} not equivalent to {}", pretty::caps(caps1), pretty::caps(&caps2_subbed));
                 return false;
             }
             return true;
@@ -1066,6 +1090,7 @@ pub fn type_eq(type1: &Type, type2: &Type, cap_bounds: &HashMap<Id, Vec<Capabili
             let mut sub = HashMap::new();
             sub.insert(*id2, Type::VarType(*id1, repr1.clone()));
             let t2_subbed = substitute_t(t2, &sub, &HashMap::new(), &HashMap::new());
+            dbg!(pretty::typ(&t1), pretty::typ(&t2_subbed));
             repr1 == repr2 && type_eq(t1, &t2_subbed, cap_bounds)
         }
         (Type::GuessType(label1), Type::GuessType(label2)) => label1 == label2,
