@@ -87,7 +87,7 @@ pub fn handle(res: Result<(), Error>) {
             }
             TypeErrorInit(pos, expected, found) => {
                 println!(
-                    "Type error! `init` is setting a field of the wrong type. It's trying to set a field of type `{}`, but the field it's setting actually has type `{}`.\n[{}]",
+                    "Type error! `init` is setting a field of the wrong type. It's trying to set a field of type `{}`, but the given value actually has type `{}`.\n[{}]",
                     pretty::typ(&expected),
                     pretty::typ(&found),
                     pos

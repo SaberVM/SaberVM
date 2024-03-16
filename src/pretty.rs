@@ -71,14 +71,14 @@ pub fn caps(cs: &Vec<Capability>) -> String {
     "{".to_owned()
         + &cs
             .iter()
-            .map(|c| cap(c.clone()))
+            .map(|c| cap(c))
             .collect::<Vec<_>>()
             .join(",")
         + "}"
 }
 
 /// Get a pretty string representation of a capability.
-pub fn cap(c: Capability) -> String {
+pub fn cap(c: &Capability) -> String {
     match c {
         VarCap(id) => "c".to_owned() + &id.1.to_string(),
         UniqueCap(r) => "1".to_owned() + &region(&r),

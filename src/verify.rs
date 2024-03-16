@@ -45,8 +45,8 @@ pub type CTStackType = Vec<CTStackVal>;
 /// the first pass gets the types of all the functions without using any constraints.
 /// The constraints are only checked to make sure the functions are well-typed, not to derive any types.
 pub enum Constraint {
-    CallConstraint(Label, Pos, Vec<Capability>, StackType, CTStackType),
-    EqConstraint(Label, UnverifiedOpcode, Pos, Type),
+    CallConstraint(Pos, Label, Vec<Capability>, StackType, CTStackType),
+    EqConstraint(Pos, UnverifiedOpcode, Label, Type),
 }
 pub type Constraints = Vec<Constraint>;
 
@@ -128,18 +128,7 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
     let mut pos = *label;
 
     loop {
-        let op = ops_iter.next();
-        if let Some(op) = op {
-            let op_str = pretty::unverified_op(*op);
-            print!(
-                "{}{}\t",
-                op_str,
-                if op_str.len() < 8 { "\t" } else { "" }
-            ); 
-        } else {
-            println!();
-        }
-        match op {
+        match ops_iter.next() {
             None => break,
             Some(op) => match op {
                 ReqOp => match compile_time_stack.pop() {
@@ -514,7 +503,7 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                     match mb_type {
                         Some(t) => match t {
                             GuessType(label) => {
-                                constraints.push( Constraint::CallConstraint(label, pos,
+                                constraints.push( Constraint::CallConstraint(pos, label,
                                         present_capabilities.to_owned(),
                                         stack_type.to_owned(),
                                         compile_time_stack.to_owned(),
@@ -691,13 +680,6 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
                 }
             },
         }
-        println!("{}", &stack_type
-            .iter()
-            .rev()
-            .map(pretty::typ)
-            .collect::<Vec<_>>()
-            .join(",")
-        );
         pos += 1;
     }
     if exist_stack.len() > 0 {
@@ -716,11 +698,12 @@ pub fn first_pass(func: &UnverifiedStmt) -> Result<(VerifiedStmt, Constraints), 
 pub fn second_pass(constraints: Constraints, types: &HashMap<Label, Type>) -> Result<(), Error> {
     for constraint in constraints {
         match constraint {
-            Constraint::CallConstraint(label, pos, caps_present, stack_type, compile_time_stack) => {
+            Constraint::CallConstraint(pos, label, caps_present, stack_type, compile_time_stack) => {
                 let mb_t = types.get(&label);
                 if let None = mb_t {
+                    dbg!(types.keys());
                     dbg!(&label);
-                    dbg!(types);
+                    dbg!(&pos);
                     panic!();
                 }
                 let FuncType(kind_context, caps_needed, arg_ts_needed) = mb_t.unwrap().clone()
@@ -737,11 +720,12 @@ pub fn second_pass(constraints: Constraints, types: &HashMap<Label, Type>) -> Re
                     caps_needed,
                 )?;
             }
-            Constraint::EqConstraint(label, op, pos, t) => {
+            Constraint::EqConstraint(pos, op, label, t) => {
                 let mb_t = types.get(&label);
                 if let None = mb_t {
+                    dbg!(types.keys());
                     dbg!(&label);
-                    dbg!(types);
+                    dbg!(&pos);
                     panic!();
                 }
                 let t2 = mb_t.unwrap().clone();
@@ -1053,7 +1037,7 @@ pub fn type_eq(type1: &Type, type2: &Type, cap_bounds: &HashMap<Id, Vec<Capabili
                         cap_assignments.insert(*id2, vec![Capability::VarCap(*id1)]);
                     }
                     (RegionKindContextEntry(id1), RegionKindContextEntry(id2)) => {
-                        dbg!(id2.1, id1.1);
+                        // dbg!(id2.1, id1.1);
                         rgn_assignments.insert(*id2, Region::VarRgn(*id1));
                     }
                     (TypeKindContextEntry(id1, repr1), TypeKindContextEntry(id2, repr2)) => {
@@ -1067,7 +1051,7 @@ pub fn type_eq(type1: &Type, type2: &Type, cap_bounds: &HashMap<Id, Vec<Capabili
             }
             let types_match = ts1.iter().zip(ts2.iter()).all(|(t1, t2)| {
                 let t2_subbed = substitute_t(t2, &type_assignments, &rgn_assignments, &cap_assignments);
-                dbg!(pretty::typ(&t1), pretty::typ(&t2_subbed));
+                // dbg!(pretty::typ(&t1), pretty::typ(&t2_subbed));
                 type_eq(
                     &t1,
                     &t2_subbed,
@@ -1090,7 +1074,7 @@ pub fn type_eq(type1: &Type, type2: &Type, cap_bounds: &HashMap<Id, Vec<Capabili
             let mut sub = HashMap::new();
             sub.insert(*id2, Type::VarType(*id1, repr1.clone()));
             let t2_subbed = substitute_t(t2, &sub, &HashMap::new(), &HashMap::new());
-            dbg!(pretty::typ(&t1), pretty::typ(&t2_subbed));
+            // dbg!(pretty::typ(&t1), pretty::typ(&t2_subbed));
             repr1 == repr2 && type_eq(t1, &t2_subbed, cap_bounds)
         }
         (Type::GuessType(label1), Type::GuessType(label2)) => label1 == label2,
