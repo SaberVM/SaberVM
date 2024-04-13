@@ -4,42 +4,24 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-mod error_handling;
 mod header;
 mod parse;
-mod pretty;
 mod verify;
 mod vm;
 
 use std::fs;
 
-use crate::header::ByteStream;
-use crate::header::Error;
-
-fn go(bytes: &ByteStream) -> Result<(), Error> {
-    let unverified_stmts = parse::go(bytes)?;
-
-    let verified_stmts = verify::go(unverified_stmts)?;
-
-    // // the following is just for debugging
-    // for func in verified_stmts {
-    //     let Func(label, func_type, ops) = func;
-    //     dbg!(label);
-    //     dbg!(pretty::typ(&func_type));
-    //     for op in ops {
-    //         println!("{}", pretty::verified_op(&op))
-    //     }
-    // }
-    vm::go(verified_stmts);
-
+fn go(bytes: header::ByteStream) -> Result<(), header::Error> {
+    let stmt1s = parse::go(&bytes)?;
+    let stmt2s = verify::go(stmt1s)?;
+    vm::go(stmt2s);
     Ok(())
 }
-
+ 
 fn main() {
     // get the bytes from the local bin.svm file (later this will be a CLI arg of course)
-    let bytes = fs::read("bin.svm").unwrap();
-
-    let mb_error = go(&bytes);
-
-    error_handling::handle(mb_error);
+    let bytes: header::ByteStream = fs::read("bin.svm").unwrap();
+    let res = go(bytes);
+    dbg!(res);
 }
+ 

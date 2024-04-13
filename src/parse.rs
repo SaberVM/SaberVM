@@ -4,17 +4,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use crate::header::ByteStream;
-use crate::header::Error;
-use crate::header::Error::*;
-use crate::header::ParsedStmts;
-use crate::header::UnverifiedOpcode;
-use crate::header::UnverifiedOpcode::*;
-use crate::header::UnverifiedStmt;
+use crate::header::*;
 
 /// Output of the lexer, input of the parser.
 /// A sequence of (possibly parameterized) opcodes.
-type LexedOpcodes = Vec<UnverifiedOpcode>;
+type LexedOpcodes = Vec<Op1>;
 
 const BYTES_TO_SKIP: u32 = 4;
 
@@ -30,102 +24,103 @@ fn lex(bytes: &ByteStream) -> Result<LexedOpcodes, Error> {
         match bytes_iter.next() {
             None => break,
             Some(byte) => lexed_opcodes.push(match byte {
-                0x00 => ReqOp,
-                0x01 => RegionOp,
-                0x02 => HeapOp,
-                0x03 => CapOp,
-                0x04 => CapLEOp,
-                0x05 => UniqueOp,
-                0x06 => RWOp,
-                0x07 => BothOp,
-                0x08 => HandleOp,
-                0x09 => I32Op,
-                0x0A => EndFunctionOp,
-                0x0B => MutOp,
+                0x00 => Op1::Req,
+                0x01 => Op1::Region,
+                0x02 => Op1::Unique,
+                0x03 => Op1::Handle,
+                0x04 => Op1::I32,
+                0x05 => match bytes_iter.next() {
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n) => Op1::Tuple(*n),
+                },
+                0x06 => Op1::Quantify,
+                0x07 => Op1::Some,
+                0x08 => Op1::All,
+                0x09 => Op1::Rgn,
+                0x0A => Op1::End,
+                0x0B => match bytes_iter.next() {
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n) => Op1::Func(*n),
+                },
                 0x0C => match bytes_iter.next() {
-                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n) => TupleOp(*n),
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n) => Op1::CTGet(*n),
                 },
-                0x0D => ArrOp,
-                0x0E => AllOp,
-                0x0F => SomeOp,
-                0x10 => EmosOp,
+                0x0D => Op1::Unpack,
+                0x0E => match bytes_iter.next() {
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n) => Op1::Get(*n),
+                },
+                0x0F => match bytes_iter.next() {
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n) => Op1::Init(*n),
+                },
+                0x10 => Op1::Malloc,
                 0x11 => match bytes_iter.next() {
-                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n) => FuncOp(*n),
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n) => Op1::Proj(*n),
                 },
-                0x12 => match bytes_iter.next() {
-                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n) => CTGetOp(*n),
+                0x12 => Op1::Call,
+                0x13 => Op1::Print,
+                0x14 => match bytes_iter.next() {
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n1) => match bytes_iter.next() {
+                        None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                        Some(n2) => match bytes_iter.next() {
+                            None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                            Some(n3) => match bytes_iter.next() {
+                                None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                                Some(n4) => Op1::Lit(
+                                    ((*n1 as u32) << 24
+                                        | (*n2 as u32) << 16
+                                        | (*n3 as u32) << 8
+                                        | (*n4 as u32)) as i32,
+                                ),
+                            },
+                        },
+                    },
                 },
-                0x13 => CTPopOp,
-                0x14 => UnpackOp,
                 0x15 => match bytes_iter.next() {
-                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n) => GetOp(*n),
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n1) => match bytes_iter.next() {
+                        None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                        Some(n2) => match bytes_iter.next() {
+                            None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                            Some(n3) => match bytes_iter.next() {
+                                None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                                Some(n4) => Op1::GlobalFunc(
+                                    (*n1 as u32) << 24
+                                        | (*n2 as u32) << 16
+                                        | (*n3 as u32) << 8
+                                        | (*n4 as u32),
+                                ),
+                            },
+                        },
+                    },
                 },
-                0x16 => match bytes_iter.next() {
-                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n) => InitOp(*n),
-                },
-                0x17 => MallocOp,
+                0x16 => Op1::Halt,
+                0x17 => Op1::Pack,
                 0x18 => match bytes_iter.next() {
-                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n) => ProjOp(*n),
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n1) => match bytes_iter.next() {
+                        None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                        Some(n2) => match bytes_iter.next() {
+                            None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                            Some(n3) => match bytes_iter.next() {
+                                None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                                Some(n4) => Op1::Size(
+                                    (*n1 as u32) << 24
+                                        | (*n2 as u32) << 16
+                                        | (*n3 as u32) << 8
+                                        | (*n4 as u32),
+                                ),
+                            },
+                        },
+                    },
                 },
-                0x19 => CallOp,
-                0x1A => PrintOp,
-                0x1B => match bytes_iter.next() {
-                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n1) => 
-                        match bytes_iter.next() {
-                            None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                            Some(n2) =>
-                                match bytes_iter.next() {
-                                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                                    Some(n3) =>
-                                        match bytes_iter.next() {
-                                            None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                                            Some(n4) => LitOp(((*n1 as u32) << 24 | (*n2 as u32) << 16 | (*n3 as u32) << 8 | (*n4 as u32)) as i32),
-                                        }
-                                }
-                        }
-                }
-                0x1C => match bytes_iter.next() {
-                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n1) => 
-                        match bytes_iter.next() {
-                            None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                            Some(n2) =>
-                                match bytes_iter.next() {
-                                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                                    Some(n3) =>
-                                        match bytes_iter.next() {
-                                            None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                                            Some(n4) => GlobalFuncOp((*n1 as u32) << 24 | (*n2 as u32) << 16 | (*n3 as u32) << 8 | (*n4 as u32)),
-                                        }
-                                }
-                        }
-                }
-                0x1D => match bytes_iter.next() {
-                    Some(n) => HaltOp(*n),
-                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                }
-                0x1E => PackOp,
-                0x1F => Word32Op,
-                0x20 => Word64Op,
-                0x21 => PtrOp,
-                0x22 => match bytes_iter.next() {
-                    Some(n) => ReprsOp(*n),
-                    None => return Err(SyntaxErrorParamNeeded(pos, *byte)),
-                }
-                0x23 => NewRgnOp,
-                0x24 => FreeRgnOp,
-                0x25 => ForallOp,
-                0x26 => LlarofOp,
-                0x27 => RgnPolyOp,
-                0x28 => YlopNgrOp,
-                op => return Err(SyntaxErrorUnknownOp(pos, *op)),
+                0x19 => Op1::NewRgn,
+                0x1A => Op1::FreeRgn,
+                op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }
         pos += 1;
@@ -143,8 +138,16 @@ fn parse(tokens: &LexedOpcodes) -> ParsedStmts {
     loop {
         match tokens_iter.next() {
             None => break,
-            Some(EndFunctionOp) => {
-                parsed_stmts.push(UnverifiedStmt::Func(function_label, current_stmt_opcodes));
+            Some(Op1::Call) => {
+                current_stmt_opcodes.push(Op1::Call);
+                parsed_stmts.push(Stmt1::Func(function_label, current_stmt_opcodes));
+                line += 1;
+                function_label = line;
+                current_stmt_opcodes = vec![];
+            }
+            Some(Op1::Halt) => {
+                current_stmt_opcodes.push(Op1::Halt);
+                parsed_stmts.push(Stmt1::Func(function_label, current_stmt_opcodes));
                 line += 1;
                 function_label = line;
                 current_stmt_opcodes = vec![];
@@ -154,7 +157,7 @@ fn parse(tokens: &LexedOpcodes) -> ParsedStmts {
         line += 1;
     }
     if current_stmt_opcodes.len() > 0 {
-        parsed_stmts.push(UnverifiedStmt::Func(function_label, current_stmt_opcodes));
+        parsed_stmts.push(Stmt1::Func(function_label, current_stmt_opcodes));
     }
     parsed_stmts
 }
@@ -163,45 +166,4 @@ fn parse(tokens: &LexedOpcodes) -> ParsedStmts {
 pub fn go(istream: &ByteStream) -> Result<ParsedStmts, Error> {
     let tokens = lex(istream)?;
     Ok(parse(&tokens)) // this is two-pass currently (lex and parse); it would be straightforward to fuse these passes.
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::header::Error::*;
-    use crate::header::UnverifiedOpcode::*;
-    use crate::header::UnverifiedStmt;
-    use crate::parse;
-
-    #[test]
-    fn test_lex() {
-        let input = vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x03];
-        let output = parse::lex(&input);
-        assert_eq!(Ok(vec![ReqOp, CTGetOp(3)]), output);
-    }
-
-    #[test]
-    fn test_lex_bad() {
-        let input = vec![0x00, 0x00, 0x00, 0x00, 0x12];
-        let output = parse::lex(&input);
-        assert_eq!(Err(SyntaxErrorParamNeeded(4, 0x12)), output);
-    }
-
-    #[test]
-    fn test_parse() {
-        let input = vec![ReqOp, EndFunctionOp, RegionOp];
-
-        let output = parse::parse(&input);
-
-        let Some(stmt1) = output.get(0) else { panic!() };
-        let UnverifiedStmt::Func(0, ops1) = stmt1 else {
-            panic!()
-        };
-        assert!(ops1.len() == 1);
-
-        let Some(stmt2) = output.get(1) else { panic!() };
-        let UnverifiedStmt::Func(2, ops2) = stmt2 else {
-            panic!()
-        };
-        assert!(ops2.len() == 1);
-    }
 }
