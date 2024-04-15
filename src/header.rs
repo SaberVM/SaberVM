@@ -132,13 +132,13 @@ pub enum CTStackVal {
 }
 
 impl CTStackVal {
-    pub fn kind(&self) -> Kind {
-        match self {
-            Self::Region(_) => Kind::Region,
-            Self::Type(_) => Kind::Type,
-            Self::Size(_) => Kind::Size,
-        }
-    }
+    // pub fn kind(&self) -> Kind {
+    //     match self {
+    //         Self::Region(_) => Kind::Region,
+    //         Self::Type(_) => Kind::Type,
+    //         Self::Size(_) => Kind::Size,
+    //     }
+    // }
 }
 
 pub enum KindContextEntry {
@@ -163,9 +163,13 @@ pub enum Error {
     TypeErrorEmptyCTStack(Pos, Op1),
     TypeErrorEmptyStack(Pos, Op1),
     KindError(Pos, Op1, Kind, CTStackVal),
+    RegionError(Pos, Op1, Region, Region),
+    TypeError(Pos, Op1, Type, Type),
+    SizeError(Pos, Op1, usize, usize),
+    UniquenessError(Pos, Op1, Region),
+    RegionAccessError(Pos, Op1, Region),
     TypeErrorSpecificTypeVarExpected(Pos, Op1, Id, Id),
     TypeErrorTypeVarExpected(Pos, Op1, Id, Type),
-    RegionError(Pos, Op1, Region, Region),
     TypeErrorCTGetOutOfRange(Pos, u8, usize),
     TypeErrorGetOutOfRange(Pos, u8, usize),
     TypeErrorInitOutOfRange(Pos, u8, usize),
@@ -176,5 +180,6 @@ pub enum Error {
     TypeErrorFunctionExpected(Pos, Op1, Type),
     TypeErrorRegionHandleExpected(Pos, Op1, Type),
     TypeErrorNotEnoughRuntimeArgs(Pos, usize, usize),
-    TypeErrorCallArgTypesMismatch(Pos, Vec<Type>, Vec<Type>)
+    TypeErrorCallArgTypesMismatch(Pos, Vec<Type>, Vec<Type>),
+    TypeErrorMallocNonTuple(Pos, Op1, Type)
 }

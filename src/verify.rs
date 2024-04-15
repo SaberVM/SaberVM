@@ -17,7 +17,7 @@ pub type CTStackType = Vec<CTStackVal>;
 /// the first pass gets the types of all the functions without using any constraints.
 /// The constraints are only checked to make sure the functions are well-typed, not to derive any types.
 pub enum Constraint {
-    CallConstraint(Pos, Label, StackType, CTStackType),
+    CallConstraint(Pos, Label, StackType),
     EqConstraint(Pos, Op1, Label, Type),
 }
 pub type Constraints = Vec<Constraint>;
@@ -307,8 +307,10 @@ pub fn first_pass(stmt: &Stmt1) -> Result<(Stmt2, Constraints), Error> {
                     let mb_tpl = stack_type.pop_back();
                     match mb_tpl {
                         Some(tpl) => match tpl.clone() {
-                            // TODO: check that r is in the regions declared by the function (which is necessary, right?)
                             Type::Tuple(component_types, r) => {
+                                if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                                    return Err(Error::RegionAccessError(pos, *op, r));
+                                }
                                 match component_types.get(usize::from(*i)) {
                                     None => {
                                         return Err(Error::TypeErrorInitOutOfRange(
@@ -365,9 +367,19 @@ pub fn first_pass(stmt: &Stmt1) -> Result<(Stmt2, Constraints), Error> {
                     match mb_rgn_handle {
                         Some(Type::Handle(r)) => {
                             // check that t is in r and that r is in the list of declared regions
-                            let size = t.size();
-                            stack_type.push_back(t);
-                            verified_ops.push(Op2::Malloc(size));
+                            if let Type::Tuple(_, r2) = t {
+                                if r.id != r2.id {
+                                    return Err(Error::RegionError(pos, *op, r, r2));
+                                }
+                                if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                                    return Err(Error::RegionAccessError(pos, *op, r));
+                                }
+                                let size = t.size();
+                                stack_type.push_back(t);
+                                verified_ops.push(Op2::Malloc(size));
+                            } else {
+                                return Err(Error::TypeErrorMallocNonTuple(pos, *op, t));
+                            }
                         }
                         Some(t) => {
                             return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t));
@@ -380,7 +392,9 @@ pub fn first_pass(stmt: &Stmt1) -> Result<(Stmt2, Constraints), Error> {
                     match mb_tpl {
                         Some(tpl) => match tpl {
                             Type::Tuple(component_types, r) => {
-                                // TODO: add check that r is in the list of declared regions
+                                if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                                    return Err(Error::RegionAccessError(pos, *op, r));
+                                }
                                 match component_types.get(usize::from(*i)) {
                                     None => {
                                         return Err(Error::TypeErrorProjOutOfRange(
@@ -413,15 +427,10 @@ pub fn first_pass(stmt: &Stmt1) -> Result<(Stmt2, Constraints), Error> {
                                     pos,
                                     label,
                                     stack_type.to_owned(),
-                                    compile_time_stack.to_owned(),
                                 ));
                             }
                             Type::Func(args) => {
-                                let () = verify_call(
-                                    pos,
-                                    &args,
-                                    stack_type.to_owned(),
-                                )?;
+                                let () = verify_call(pos, &args, stack_type.to_owned())?;
                             }
                             // TODO: polymorphic function types
                             _ => return Err(Error::TypeErrorFunctionExpected(pos, *op, t)),
@@ -430,29 +439,105 @@ pub fn first_pass(stmt: &Stmt1) -> Result<(Stmt2, Constraints), Error> {
                     }
                     verified_ops.push(Op2::Call)
                 }
-                Op1::Print => {
-                    todo!()
-                }
+                Op1::Print => match stack_type.pop_back() {
+                    Some(Type::I32) => verified_ops.push(Op2::Print),
+                    Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                },
                 Op1::Lit(lit) => {
-                    todo!()
+                    stack_type.push_back(Type::I32);
+                    verified_ops.push(Op2::Lit(*lit))
                 }
                 Op1::GlobalFunc(label) => {
-                    todo!()
+                    stack_type.push_back(Type::Guess(*label));
+                    verified_ops.push(Op2::GlobalFunc(*label))
                 }
-                Op1::Halt => {
-                    todo!()
-                }
-                Op1::Pack => {
-                    todo!()
-                }
-                Op1::Size(s) => {
-                    todo!()
-                }
+                Op1::Halt => match stack_type.pop_back() {
+                    Some(Type::I32) => verified_ops.push(Op2::Halt),
+                    Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                },
+                Op1::Pack => match stack_type.pop_back() {
+                    Some(type_of_hidden) => match compile_time_stack.pop() {
+                        Some(CTStackVal::Type(hidden_type)) => match compile_time_stack.pop() {
+                            Some(CTStackVal::Type(Type::Exists(
+                                id,
+                                size_of_hidden,
+                                existential_type,
+                            ))) => {
+                                let unpacked_type = substitute_t(
+                                    &existential_type,
+                                    &HashMap::from([(id, hidden_type)]),
+                                    &HashMap::new(),
+                                );
+                                if !type_eq(&type_of_hidden, &unpacked_type) {
+                                    return Err(Error::TypeError(
+                                        pos,
+                                        *op,
+                                        unpacked_type,
+                                        type_of_hidden,
+                                    ));
+                                }
+                                if size_of_hidden != type_of_hidden.size() {
+                                    return Err(Error::SizeError(
+                                        pos,
+                                        *op,
+                                        size_of_hidden,
+                                        type_of_hidden.size(),
+                                    ));
+                                }
+                                stack_type.push_back(Type::Exists(
+                                    id,
+                                    size_of_hidden,
+                                    existential_type,
+                                ));
+                            }
+                            Some(CTStackVal::Type(t)) => {
+                                return Err(Error::TypeErrorExistentialExpected(pos, *op, t))
+                            }
+                            Some(ctval) => {
+                                return Err(Error::KindError(pos, *op, Kind::Type, ctval))
+                            }
+                            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+                        },
+                        Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
+                        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+                    },
+                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                },
+                Op1::Size(s) => compile_time_stack.push(CTStackVal::Size((*s).try_into().unwrap())),
                 Op1::NewRgn => {
-                    todo!()
+                    let id = Id(*label, fresh_id);
+                    fresh_id += 1;
+                    let r = Region {
+                        unique: true,
+                        id: id,
+                    };
+                    stack_type.push_back(Type::Handle(r.clone()));
+                    compile_time_stack.push(CTStackVal::Region(r));
+                    verified_ops.push(Op2::NewRgn);
                 }
                 Op1::FreeRgn => {
-                    todo!()
+                    match stack_type.pop_back() {
+                        Some(Type::Handle(r)) => {
+                            match rgn_vars.iter().find(|r2| r.id == r2.id) {
+                                Some(r2) if r2.unique => {
+                                    rgn_vars.retain(|r2| r2.id != r.id);
+                                    verified_ops.push(Op2::FreeRgn)
+                                }
+                                Some(_r2) => return Err(Error::UniquenessError(pos, *op, r)),
+                                None => return Err(Error::RegionAccessError(pos, *op, r)),
+                            }
+                            // TODO: don't check the local variable, check the declarations of the function
+                            // Then we can remove the declaration to avoid use-after-free and double-free
+                            if !r.unique {
+                                return Err(Error::UniquenessError(pos, *op, r));
+                            }
+                            verified_ops.push(Op2::FreeRgn);
+                        }
+                        Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    }
                 }
             },
         }
@@ -467,7 +552,37 @@ pub fn first_pass(stmt: &Stmt1) -> Result<(Stmt2, Constraints), Error> {
 }
 
 pub fn second_pass(constraints: Constraints, types: &HashMap<Label, Type>) -> Result<(), Error> {
-    todo!()
+    for constraint in constraints {
+        match constraint {
+            Constraint::CallConstraint(pos, label, stack_type) => {
+                let mb_t = types.get(&label);
+                if let None = mb_t {
+                    dbg!(types.keys());
+                    dbg!(&label);
+                    dbg!(&pos);
+                    panic!();
+                }
+                let Type::Func(arg_ts_needed) = mb_t.unwrap().clone() else {
+                    panic!()
+                };
+                let () = verify_call(pos, &arg_ts_needed, stack_type)?;
+            }
+            Constraint::EqConstraint(pos, op, label, t) => {
+                let mb_t = types.get(&label);
+                if let None = mb_t {
+                    dbg!(types.keys());
+                    dbg!(&label);
+                    dbg!(&pos);
+                    panic!();
+                }
+                let t2 = mb_t.unwrap().clone();
+                if !type_eq(&t2, &t) {
+                    return Err(Error::TypeError(pos, op, t, t2));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Perform some variable substitutions within a type.
@@ -538,11 +653,7 @@ pub fn type_eq(type1: &Type, type2: &Type) -> bool {
     }
 }
 
-pub fn verify_call(
-    pos: Pos,
-    args: &Vec<Type>,
-    mut stack_type: StackType,
-) -> Result<(), Error> {
+pub fn verify_call(pos: Pos, args: &Vec<Type>, mut stack_type: StackType) -> Result<(), Error> {
     let arg_ts_needed = args;
     let mut arg_ts_present = vec![];
     for _ in 0..arg_ts_needed.len() {

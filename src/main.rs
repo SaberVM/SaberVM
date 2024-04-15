@@ -22,6 +22,6 @@ fn main() {
     // get the bytes from the local bin.svm file (later this will be a CLI arg of course)
     let bytes: header::ByteStream = fs::read("bin.svm").unwrap();
     let res = go(bytes);
-    dbg!(res);
+    let _ = dbg!(res);
 }
  
