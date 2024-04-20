@@ -49,6 +49,8 @@ pub enum Op1 {
     Size(u32),
     NewRgn,
     FreeRgn,
+    Ptr,
+    Deref,
 }
 
 /// The type of unverified ops.
@@ -58,7 +60,7 @@ pub enum Op2 {
     Get(usize, usize),
     Init(usize, usize),
     Malloc(usize),
-    Proj(usize, usize),
+    Proj(usize, usize, usize),
     Call,
     Print,
     Lit(i32),
@@ -66,6 +68,7 @@ pub enum Op2 {
     Halt,
     NewRgn,
     FreeRgn,
+    Deref(usize),
 }
 
 /// Statements produced by the parsing pass.
@@ -91,7 +94,8 @@ pub struct Region {
 pub enum Type {
     I32,
     Handle(Region),
-    Tuple(Vec<Type>, Region),
+    Tuple(Vec<Type>),
+    Ptr(Box<Type>, Region),
     Var(Id, usize),
     Func(Vec<Type>),
     Forall(Id, usize, Box<Type>),
@@ -105,7 +109,8 @@ impl Type {
         match self {
             Self::I32 => 4,
             Self::Handle(_r) => 8,
-            Self::Tuple(ts, _) => ts.iter().map(|t| t.size()).sum(),
+            Self::Tuple(ts) => ts.iter().map(|t| t.size()).sum(),
+            Self::Ptr(_t, _r) => 16,
             Self::Var(_id, s) => *s,
             Self::Func(_param_ts) => 8,
             Self::Forall(_id, _size, t) => t.size(),
@@ -181,5 +186,6 @@ pub enum Error {
     TypeErrorRegionHandleExpected(Pos, Op1, Type),
     TypeErrorNotEnoughRuntimeArgs(Pos, usize, usize),
     TypeErrorCallArgTypesMismatch(Pos, Vec<Type>, Vec<Type>),
-    TypeErrorMallocNonTuple(Pos, Op1, Type)
+    TypeErrorMallocNonTuple(Pos, Op1, Type),
+    TypeErrorPtrExpected(Pos, Op1, Type),
 }

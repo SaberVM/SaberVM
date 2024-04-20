@@ -132,13 +132,7 @@ pub fn first_pass(stmt: &Stmt1) -> Result<(Stmt2, Constraints), Error> {
                             None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
                         }
                     }
-                    match compile_time_stack.pop() {
-                        Some(CTStackVal::Region(r)) => {
-                            compile_time_stack.push(CTStackVal::Type(Type::Tuple(ts, r)))
-                        }
-                        Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Region, ctval)),
-                        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                    }
+                    compile_time_stack.push(CTStackVal::Type(Type::Tuple(ts)))
                 }
                 Op1::Quantify => match compile_time_stack.pop() {
                     Some(CTStackVal::Size(s)) => {
@@ -307,10 +301,10 @@ pub fn first_pass(stmt: &Stmt1) -> Result<(Stmt2, Constraints), Error> {
                     let mb_tpl = stack_type.pop_back();
                     match mb_tpl {
                         Some(tpl) => match tpl.clone() {
-                            Type::Tuple(component_types, r) => {
-                                if rgn_vars.iter().all(|r2| r.id != r2.id) {
-                                    return Err(Error::RegionAccessError(pos, *op, r));
-                                }
+                            Type::Tuple(component_types) => {
+                                // if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                                //     return Err(Error::RegionAccessError(pos, *op, r));
+                                // }
                                 match component_types.get(usize::from(*i)) {
                                     None => {
                                         return Err(Error::TypeErrorInitOutOfRange(
@@ -367,10 +361,7 @@ pub fn first_pass(stmt: &Stmt1) -> Result<(Stmt2, Constraints), Error> {
                     match mb_rgn_handle {
                         Some(Type::Handle(r)) => {
                             // check that t is in r and that r is in the list of declared regions
-                            if let Type::Tuple(_, r2) = t {
-                                if r.id != r2.id {
-                                    return Err(Error::RegionError(pos, *op, r, r2));
-                                }
+                            if let Type::Tuple(_) = t {
                                 if rgn_vars.iter().all(|r2| r.id != r2.id) {
                                     return Err(Error::RegionAccessError(pos, *op, r));
                                 }
@@ -391,10 +382,8 @@ pub fn first_pass(stmt: &Stmt1) -> Result<(Stmt2, Constraints), Error> {
                     let mb_tpl = stack_type.pop_back();
                     match mb_tpl {
                         Some(tpl) => match tpl {
-                            Type::Tuple(component_types, r) => {
-                                if rgn_vars.iter().all(|r2| r.id != r2.id) {
-                                    return Err(Error::RegionAccessError(pos, *op, r));
-                                }
+                            Type::Tuple(component_types) => {
+                                let s: usize = component_types.iter().map(|t| t.size()).sum();
                                 match component_types.get(usize::from(*i)) {
                                     None => {
                                         return Err(Error::TypeErrorProjOutOfRange(
@@ -409,7 +398,7 @@ pub fn first_pass(stmt: &Stmt1) -> Result<(Stmt2, Constraints), Error> {
                                             offset += component_types[i2 as usize].size();
                                         }
                                         stack_type.push_back(t.clone());
-                                        verified_ops.push(Op2::Proj(offset, t.size()));
+                                        verified_ops.push(Op2::Proj(offset, t.size(), s));
                                     }
                                 }
                             }
@@ -539,6 +528,28 @@ pub fn first_pass(stmt: &Stmt1) -> Result<(Stmt2, Constraints), Error> {
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     }
                 }
+                Op1::Ptr => match compile_time_stack.pop() {
+                    Some(CTStackVal::Type(t)) => 
+                        match compile_time_stack.pop() {
+                            Some(CTStackVal::Region(r)) => compile_time_stack.push(CTStackVal::Type(Type::Ptr(Box::new(t), r))),
+                            Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Region, ctval)),
+                            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+                        }
+                    Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
+                    None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+                }
+                Op1::Deref => match stack_type.pop_back() {
+                    Some(Type::Ptr(t, r)) => {
+                        if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                            return Err(Error::RegionAccessError(pos, *op, r));
+                        }
+                        let s = t.size();
+                        stack_type.push_back(*t);
+                        verified_ops.push(Op2::Deref(s));
+                    }
+                    Some(t) => return Err(Error::TypeErrorPtrExpected(pos, *op, t)),
+                    None => return Err(Error::TypeErrorEmptyStack(pos, *op))
+                }
             },
         }
         pos += 1;
@@ -591,10 +602,8 @@ pub fn substitute_t(typ: &Type, tsubs: &HashMap<Id, Type>, rsubs: &HashMap<Id, R
     match typ {
         Type::I32 => Type::I32,
         Type::Handle(r) => Type::Handle(substitute_r(r, rsubs)),
-        Type::Tuple(ts, r) => Type::Tuple(
-            ts.iter().map(|t| substitute_t(t, tsubs, rsubs)).collect(),
-            substitute_r(r, rsubs),
-        ),
+        Type::Tuple(ts) => Type::Tuple(ts.iter().map(|t| substitute_t(t, tsubs, rsubs)).collect()),
+        Type::Ptr(t, r) => Type::Ptr(Box::new(substitute_t(t, tsubs, rsubs)), substitute_r(r, rsubs)),
         Type::Var(id, repr) => match tsubs.get(id) {
             Some(new) => new.clone(),
             None => Type::Var(*id, repr.clone()),
@@ -625,8 +634,8 @@ pub fn type_eq(type1: &Type, type2: &Type) -> bool {
     match (type1, type2) {
         (Type::I32, Type::I32) => true,
         (Type::Handle(r1), Type::Handle(r2)) => r1 == r2,
-        (Type::Tuple(ts1, r1), Type::Tuple(ts2, r2)) => {
-            r1 == r2 && ts1.len() == ts2.len() && {
+        (Type::Tuple(ts1), Type::Tuple(ts2)) => {
+            ts1.len() == ts2.len() && {
                 let mut ts2 = ts2.iter();
                 for t1 in ts1 {
                     let t2 = ts2.next().unwrap();
@@ -637,6 +646,7 @@ pub fn type_eq(type1: &Type, type2: &Type) -> bool {
                 return true;
             }
         }
+        (Type::Ptr(t1, r1), Type::Ptr(t2, r2)) => r1 == r2 && type_eq(t1, t2),
         (Type::Var(id1, repr1), Type::Var(id2, repr2)) => id1 == id2 && repr1 == repr2,
         (Type::Func(ts1), Type::Func(ts2)) => {
             ts1.iter().zip(ts2.iter()).all(|(t1, t2)| type_eq(&t1, &t2))

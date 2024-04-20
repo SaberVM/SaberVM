@@ -120,6 +120,8 @@ fn lex(bytes: &ByteStream) -> Result<LexedOpcodes, Error> {
                 },
                 0x19 => Op1::NewRgn,
                 0x1A => Op1::FreeRgn,
+                0x1B => Op1::Ptr,
+                0x1C => Op1::Deref,
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }
