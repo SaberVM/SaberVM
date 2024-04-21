@@ -12,9 +12,9 @@ mod vm;
 use std::fs;
 
 fn go(bytes: header::ByteStream) -> Result<(), header::Error> {
-    let stmt1s = parse::go(&bytes)?;
-    let stmt2s = verify::go(stmt1s)?;
-    vm::go(stmt2s);
+    let (types_instrs, unverified_stmts) = parse::go(&bytes)?;
+    let stmts = verify::go(types_instrs, unverified_stmts)?;
+    vm::go(stmts);
     Ok(())
 }
  

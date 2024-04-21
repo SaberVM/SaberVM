@@ -7,9 +7,6 @@
 /// The input type for SaberVM.
 pub type ByteStream = Vec<u8>;
 
-/// The output type for the parser.
-pub type ParsedStmts = Vec<Stmt1>;
-
 pub type Pos = u32;
 pub type Label = u32;
 
@@ -22,19 +19,17 @@ pub struct Id(pub Pos, pub u32);
 /// This includes all the static analysis ops, which disappear after verification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Op1 {
-    Req,
-    Region,
     Unique,
     Handle,
     I32,
     Tuple(u8),
-    Quantify,
     Some,
     All,
     Rgn,
     End,
     Func(u8),
     CTGet(u8),
+    Lced,
     Unpack,
     Get(u8),
     Init(u8),
@@ -71,6 +66,10 @@ pub enum Op2 {
     Deref(usize),
 }
 
+pub enum ForwardDec {
+    Func(Pos, Vec<Op1>),
+}
+
 /// Statements produced by the parsing pass.
 /// Next they would go through the verification pass.
 #[derive(Debug)]
@@ -101,7 +100,6 @@ pub enum Type {
     Forall(Id, usize, Box<Type>),
     ForallRegion(Region, Box<Type>),
     Exists(Id, usize, Box<Type>),
-    Guess(Label),
 }
 
 impl Type {
@@ -116,7 +114,6 @@ impl Type {
             Self::Forall(_id, _size, t) => t.size(),
             Self::ForallRegion(_r, t) => t.size(),
             Self::Exists(_id, _size, t) => t.size(),
-            Self::Guess(_label) => panic!("size of guess type"),
         }
     }
 }
@@ -144,11 +141,6 @@ impl CTStackVal {
     //         Self::Size(_) => Kind::Size,
     //     }
     // }
-}
-
-pub enum KindContextEntry {
-    Region(Region),
-    Type(Id),
 }
 
 pub enum Quantification {

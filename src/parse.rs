@@ -13,56 +13,65 @@ type LexedOpcodes = Vec<Op1>;
 const BYTES_TO_SKIP: u32 = 4;
 
 /// Lex bytes into (possibly parameterized) intructions.
-fn lex(bytes: &ByteStream) -> Result<LexedOpcodes, Error> {
+fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
     let mut bytes_iter = bytes.iter();
     let mut lexed_opcodes = vec![];
     for _ in 0..BYTES_TO_SKIP {
         bytes_iter.next();
     }
     let mut pos = BYTES_TO_SKIP;
+    let mut a = [0, 0, 0, 0];
+    for i in 0..4 {
+        match bytes_iter.next() {
+            None => panic!("unexpected eof (this shouldn't be a panic tbh)"),
+            Some(b) => {
+                a[i] = *b;
+                pos += 1;
+            }
+        }
+    }
+    let n = u32::from_le_bytes(a);
     loop {
         match bytes_iter.next() {
             None => break,
             Some(byte) => lexed_opcodes.push(match byte {
-                0x00 => Op1::Req,
-                0x01 => Op1::Region,
-                0x02 => Op1::Unique,
-                0x03 => Op1::Handle,
-                0x04 => Op1::I32,
-                0x05 => match bytes_iter.next() {
+                0x00 => Op1::Unique,
+                0x01 => Op1::Handle,
+                0x02 => Op1::I32,
+                0x03 => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1::Tuple(*n),
                 },
-                0x06 => Op1::Quantify,
-                0x07 => Op1::Some,
-                0x08 => Op1::All,
-                0x09 => Op1::Rgn,
-                0x0A => Op1::End,
-                0x0B => match bytes_iter.next() {
+                0x04 => Op1::Some,
+                0x05 => Op1::All,
+                0x06 => Op1::Rgn,
+                0x07 => Op1::End,
+                0x08 => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1::Func(*n),
                 },
-                0x0C => match bytes_iter.next() {
+                0x09 => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1::CTGet(*n),
                 },
-                0x0D => Op1::Unpack,
-                0x0E => match bytes_iter.next() {
+                0x0A => Op1::Lced,
+                0x0B => Op1::Unpack,
+                0x0C => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1::Get(*n),
                 },
-                0x0F => match bytes_iter.next() {
+                0x0D => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1::Init(*n),
                 },
-                0x10 => Op1::Malloc,
-                0x11 => match bytes_iter.next() {
+                0x0E => Op1::Malloc,
+                0x0F => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1::Proj(*n),
                 },
-                0x12 => Op1::Call,
-                0x13 => Op1::Print,
-                0x14 => match bytes_iter.next() {
+                0x10 => Op1::Call,
+                0x11 => Op1::Print,
+                0x12 => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n1) => match bytes_iter.next() {
                         None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
@@ -80,7 +89,7 @@ fn lex(bytes: &ByteStream) -> Result<LexedOpcodes, Error> {
                         },
                     },
                 },
-                0x15 => match bytes_iter.next() {
+                0x13 => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n1) => match bytes_iter.next() {
                         None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
@@ -98,9 +107,9 @@ fn lex(bytes: &ByteStream) -> Result<LexedOpcodes, Error> {
                         },
                     },
                 },
-                0x16 => Op1::Halt,
-                0x17 => Op1::Pack,
-                0x18 => match bytes_iter.next() {
+                0x14 => Op1::Halt,
+                0x15 => Op1::Pack,
+                0x16 => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n1) => match bytes_iter.next() {
                         None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
@@ -118,54 +127,70 @@ fn lex(bytes: &ByteStream) -> Result<LexedOpcodes, Error> {
                         },
                     },
                 },
-                0x19 => Op1::NewRgn,
-                0x1A => Op1::FreeRgn,
-                0x1B => Op1::Ptr,
-                0x1C => Op1::Deref,
+                0x17 => Op1::NewRgn,
+                0x18 => Op1::FreeRgn,
+                0x19 => Op1::Ptr,
+                0x1A => Op1::Deref,
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }
         pos += 1;
     }
-    Ok(lexed_opcodes)
+    Ok((lexed_opcodes, n))
+}
+
+fn parse_forward_decs(tokens: &LexedOpcodes, n: u32) -> Result<(Vec<ForwardDec>, std::slice::Iter<'_, Op1>), Error> {
+    let mut forward_decs = vec![];
+    let mut tokens_iter = tokens.iter();
+    let mut current_stmt_opcodes = vec![];
+
+    for i in 0..n {
+        loop {
+            match tokens_iter.next() {
+                None => panic!("this shouldn't be a panic"),
+                Some(Op1::Lced) => break,
+                Some(op) => current_stmt_opcodes.push(*op),
+            }
+        }
+        forward_decs.push(ForwardDec::Func(i, current_stmt_opcodes));
+        current_stmt_opcodes = vec![];
+    }
+    Ok((forward_decs, tokens_iter))
 }
 
 /// Divide an opcode stream into functions, producing the AST.
-fn parse(tokens: &LexedOpcodes) -> ParsedStmts {
+fn parse(mut tokens_iter: std::slice::Iter<'_, Op1>, n: u32) -> Result<Vec<Stmt1>, Error> {
     let mut parsed_stmts = vec![];
     let mut current_stmt_opcodes = vec![];
-    let mut tokens_iter = tokens.iter();
-    let mut line = 0;
-    let mut function_label = 0;
-    loop {
-        match tokens_iter.next() {
-            None => break,
-            Some(Op1::Call) => {
-                current_stmt_opcodes.push(Op1::Call);
-                parsed_stmts.push(Stmt1::Func(function_label, current_stmt_opcodes));
-                line += 1;
-                function_label = line;
-                current_stmt_opcodes = vec![];
+    for i in 0..n {
+        loop {
+            match tokens_iter.next() {
+                None => break,
+                Some(Op1::Call) => {
+                    current_stmt_opcodes.push(Op1::Call);
+                    parsed_stmts.push(Stmt1::Func(i, current_stmt_opcodes));
+                    current_stmt_opcodes = vec![];
+                }
+                Some(Op1::Halt) => {
+                    current_stmt_opcodes.push(Op1::Halt);
+                    parsed_stmts.push(Stmt1::Func(i, current_stmt_opcodes));
+                    current_stmt_opcodes = vec![];
+                }
+                Some(op) => current_stmt_opcodes.push(*op),
             }
-            Some(Op1::Halt) => {
-                current_stmt_opcodes.push(Op1::Halt);
-                parsed_stmts.push(Stmt1::Func(function_label, current_stmt_opcodes));
-                line += 1;
-                function_label = line;
-                current_stmt_opcodes = vec![];
-            }
-            Some(op) => current_stmt_opcodes.push(*op),
         }
-        line += 1;
     }
     if current_stmt_opcodes.len() > 0 {
-        parsed_stmts.push(Stmt1::Func(function_label, current_stmt_opcodes));
+        panic!("this shouldn't be a panic either");
     }
-    parsed_stmts
+    Ok(parsed_stmts)
 }
 
 /// Lex a stream of bytes, maybe return an error, otherwise parse.
-pub fn go(istream: &ByteStream) -> Result<ParsedStmts, Error> {
-    let tokens = lex(istream)?;
-    Ok(parse(&tokens)) // this is two-pass currently (lex and parse); it would be straightforward to fuse these passes.
+pub fn go(istream: &ByteStream) -> Result<(Vec<ForwardDec>, Vec<Stmt1>), Error> {
+    // this is two-pass currently (lex and parse); it would be straightforward to fuse these passes.
+    let (tokens, n) = lex(istream)?;
+    let (forward_decs, rest) = parse_forward_decs(&tokens, n)?;
+    let stmts = parse(rest, n)?; 
+    Ok((forward_decs, stmts))
 }
