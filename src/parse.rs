@@ -46,32 +46,33 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
                 0x05 => Op1::All,
                 0x06 => Op1::Rgn,
                 0x07 => Op1::End,
-                0x08 => match bytes_iter.next() {
+                0x08 => Op1::App,
+                0x09 => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1::Func(*n),
                 },
-                0x09 => match bytes_iter.next() {
+                0x0A => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1::CTGet(*n),
                 },
-                0x0A => Op1::Lced,
-                0x0B => Op1::Unpack,
-                0x0C => match bytes_iter.next() {
+                0x0B => Op1::Lced,
+                0x0C => Op1::Unpack,
+                0x0D => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1::Get(*n),
                 },
-                0x0D => match bytes_iter.next() {
+                0x0E => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1::Init(*n),
                 },
-                0x0E => Op1::Malloc,
-                0x0F => match bytes_iter.next() {
+                0x0F => Op1::Malloc,
+                0x10 => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n) => Op1::Proj(*n),
                 },
-                0x10 => Op1::Call,
-                0x11 => Op1::Print,
-                0x12 => match bytes_iter.next() {
+                0x11 => Op1::Call,
+                0x12 => Op1::Print,
+                0x13 => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n1) => match bytes_iter.next() {
                         None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
@@ -89,7 +90,7 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
                         },
                     },
                 },
-                0x13 => match bytes_iter.next() {
+                0x14 => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n1) => match bytes_iter.next() {
                         None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
@@ -107,9 +108,9 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
                         },
                     },
                 },
-                0x14 => Op1::Halt,
-                0x15 => Op1::Pack,
-                0x16 => match bytes_iter.next() {
+                0x15 => Op1::Halt,
+                0x16 => Op1::Pack,
+                0x17 => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                     Some(n1) => match bytes_iter.next() {
                         None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
@@ -127,10 +128,10 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
                         },
                     },
                 },
-                0x17 => Op1::NewRgn,
-                0x18 => Op1::FreeRgn,
-                0x19 => Op1::Ptr,
-                0x1A => Op1::Deref,
+                0x18 => Op1::NewRgn,
+                0x19 => Op1::FreeRgn,
+                0x1A => Op1::Ptr,
+                0x1B => Op1::Deref,
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }

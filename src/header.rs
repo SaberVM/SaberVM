@@ -27,6 +27,7 @@ pub enum Op1 {
     All,
     Rgn,
     End,
+    App,
     Func(u8),
     CTGet(u8),
     Lced,
@@ -180,4 +181,7 @@ pub enum Error {
     TypeErrorCallArgTypesMismatch(Pos, Vec<Type>, Vec<Type>),
     TypeErrorMallocNonTuple(Pos, Op1, Type),
     TypeErrorPtrExpected(Pos, Op1, Type),
+    TypeErrorForallExpected(Pos, Op1, Type),
+    TypeErrorForallRegionExpected(Pos, Op1, Type),
+    KindErrorBadApp(Pos, Op1, CTStackVal),
 }

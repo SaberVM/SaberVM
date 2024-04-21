@@ -40,24 +40,25 @@ pub fn type_pass(stmt: &ForwardDec, mut fresh_id: u32) -> Result<(Label, Type, u
     let mut next_region_is_unique = false;
     let mut compile_time_stack: Vec<CTStackVal> = vec![];
     let mut quantification_stack: Vec<Quantification> = vec![];
+    let mut pos = *label;
     for op in ops {
         match op {
-            Op1::Rgn => {
-                let id = Id(*label, fresh_id);
-                fresh_id += 1;
-                let r = Region {
-                    unique: next_region_is_unique,
-                    id: id,
-                };
-                next_region_is_unique = false;
-                compile_time_stack.push(CTStackVal::Region(r.clone()));
-                quantification_stack.push(Quantification::Region(r));
-            }
-            Op1::Unique => {
-                next_region_is_unique = true;
-            }
+            Op1::Unique => next_region_is_unique = true,
+            Op1::Handle => handle_handle(pos, op, &mut compile_time_stack)?,
+            Op1::I32 => compile_time_stack.push(CTStackVal::Type(Type::I32)),
+            Op1::Tuple(n) => handle_tuple(n, pos, op, &mut compile_time_stack)?,
+            Op1::Some => handle_some(pos, op, &mut compile_time_stack, &mut fresh_id, label, &mut quantification_stack)?,
+            Op1::All => handle_all(pos, op, &mut compile_time_stack, &mut fresh_id, label, &mut quantification_stack)?,
+            Op1::Rgn => handle_rgn(&mut next_region_is_unique, label, &mut fresh_id, &mut compile_time_stack, &mut quantification_stack)?,
+            Op1::End => handle_end(pos, op, &mut compile_time_stack, &mut quantification_stack)?,
+            Op1::App => handle_app(pos, op, &mut compile_time_stack)?,
+            Op1::Func(n) => handle_func(n, pos, op, &mut compile_time_stack)?,
+            Op1::CTGet(i) => handle_ctget(pos, i, &mut compile_time_stack)?,
+            Op1::Size(s) => compile_time_stack.push(CTStackVal::Size((*s).try_into().unwrap())),
+            Op1::Ptr => handle_ptr(pos, op, &mut compile_time_stack)?,
             _ => panic!()
         }
+        pos += 1;
     }
     todo!()
 }
@@ -90,153 +91,17 @@ pub fn definition_pass(stmt: &Stmt1, types: &HashMap<Label, Type>, mut fresh_id:
         match ops_iter.next() {
             None => break,
             Some(op) => match op {
-                Op1::Unique => {
-                    next_region_is_unique = true;
-                }
-                Op1::Handle => match compile_time_stack.pop() {
-                    Some(CTStackVal::Region(r)) => {
-                        compile_time_stack.push(CTStackVal::Type(Type::Handle(r)));
-                    }
-                    Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Region, ctval)),
-                    None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                },
+                Op1::Unique => next_region_is_unique = true,
+                Op1::Handle => handle_handle(pos, op, &mut compile_time_stack)?,
                 Op1::I32 => compile_time_stack.push(CTStackVal::Type(Type::I32)),
-                Op1::Tuple(n) => {
-                    let mut ts = vec![];
-                    for _ in 0..*n {
-                        match compile_time_stack.pop() {
-                            Some(CTStackVal::Type(t)) => ts.push(t),
-                            Some(ctval) => {
-                                return Err(Error::KindError(pos, *op, Kind::Type, ctval))
-                            }
-                            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                        }
-                    }
-                    compile_time_stack.push(CTStackVal::Type(Type::Tuple(ts)))
-                }
-                Op1::Some => match compile_time_stack.pop() {
-                    Some(CTStackVal::Size(s)) => {
-                        let id = Id(*label, fresh_id);
-                        fresh_id += 1;
-                        compile_time_stack.push(CTStackVal::Type(Type::Var(id.clone(), s)));
-                        quantification_stack.push(Quantification::Exist(id, s));
-                    }
-                    Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Size, ctval)),
-                    None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                },
-                Op1::All => match compile_time_stack.pop() {
-                    Some(CTStackVal::Size(s)) => {
-                        let id = Id(*label, fresh_id);
-                        fresh_id += 1;
-                        compile_time_stack.push(CTStackVal::Type(Type::Var(id.clone(), s)));
-                        quantification_stack.push(Quantification::Forall(id, s));
-                    }
-                    Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Size, ctval)),
-                    None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                },
-                Op1::Rgn => {
-                    let id = Id(*label, fresh_id);
-                    let r = Region {
-                        unique: next_region_is_unique,
-                        id: id,
-                    };
-                    fresh_id += 1;
-                    compile_time_stack.push(CTStackVal::Region(r.clone()));
-                    quantification_stack.push(Quantification::Region(r));
-                }
-                Op1::End => match quantification_stack.pop() {
-                    Some(Quantification::Exist(id, s)) => match compile_time_stack.pop() {
-                        Some(CTStackVal::Type(t)) => match compile_time_stack.pop() {
-                            Some(CTStackVal::Type(Type::Var(id2, _))) if id == id2 => {
-                                compile_time_stack.push(CTStackVal::Type(Type::Exists(
-                                    id,
-                                    s,
-                                    Box::new(t),
-                                )))
-                            }
-                            Some(CTStackVal::Type(Type::Var(id2, _))) => {
-                                return Err(Error::TypeErrorSpecificTypeVarExpected(
-                                    pos, *op, id, id2,
-                                ))
-                            }
-                            Some(CTStackVal::Type(t)) => {
-                                return Err(Error::TypeErrorTypeVarExpected(pos, *op, id, t))
-                            }
-                            Some(ctval) => {
-                                return Err(Error::KindError(pos, *op, Kind::Type, ctval))
-                            }
-                            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                        },
-                        Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
-                        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                    },
-                    Some(Quantification::Forall(id, s)) => match compile_time_stack.pop() {
-                        Some(CTStackVal::Type(t)) => match compile_time_stack.pop() {
-                            Some(CTStackVal::Type(Type::Var(id2, _))) if id == id2 => {
-                                compile_time_stack.push(CTStackVal::Type(Type::Forall(
-                                    id,
-                                    s,
-                                    Box::new(t),
-                                )))
-                            }
-                            Some(CTStackVal::Type(Type::Var(id2, _))) => {
-                                return Err(Error::TypeErrorSpecificTypeVarExpected(
-                                    pos, *op, id, id2,
-                                ))
-                            }
-                            Some(CTStackVal::Type(t)) => {
-                                return Err(Error::TypeErrorTypeVarExpected(pos, *op, id, t))
-                            }
-                            Some(ctval) => {
-                                return Err(Error::KindError(pos, *op, Kind::Type, ctval))
-                            }
-                            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                        },
-                        Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
-                        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                    },
-                    Some(Quantification::Region(r)) => match compile_time_stack.pop() {
-                        Some(CTStackVal::Type(t)) => match compile_time_stack.pop() {
-                            Some(CTStackVal::Region(r2)) if r.id == r2.id => compile_time_stack
-                                .push(CTStackVal::Type(Type::ForallRegion(r, Box::new(t)))),
-                            Some(CTStackVal::Region(r2)) => {
-                                return Err(Error::RegionError(pos, *op, r, r2))
-                            }
-                            Some(ctval) => {
-                                return Err(Error::KindError(pos, *op, Kind::Region, ctval))
-                            }
-                            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                        },
-                        Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
-                        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                    },
-                    None => return Err(Error::TypeErrorEmptyQuantificationStack(pos, *op)),
-                },
-                Op1::Func(n) => {
-                    let mut ts = vec![];
-                    for _ in 0..*n {
-                        match compile_time_stack.pop() {
-                            Some(CTStackVal::Type(t)) => ts.push(t),
-                            Some(ctval) => {
-                                return Err(Error::KindError(pos, *op, Kind::Type, ctval))
-                            }
-                            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                        }
-                    }
-                    compile_time_stack.push(CTStackVal::Type(Type::Func(ts)))
-                }
-                Op1::CTGet(i) => {
-                    match compile_time_stack.get(compile_time_stack.len() - 1 - (*i) as usize) {
-                        Some(ctval) => compile_time_stack.push(ctval.clone()),
-                        None => {
-                            return Err(Error::TypeErrorCTGetOutOfRange(
-                                pos,
-                                *i,
-                                compile_time_stack.len(),
-                            ))
-                        }
-                    }
-                }
+                Op1::Tuple(n) => handle_tuple(n, pos, op, &mut compile_time_stack)?,
+                Op1::Some => handle_some(pos, op, &mut compile_time_stack, &mut fresh_id, label, &mut quantification_stack)?,
+                Op1::All => handle_all(pos, op, &mut compile_time_stack, &mut fresh_id, label, &mut quantification_stack)?,
+                Op1::Rgn => handle_rgn(&mut next_region_is_unique, label, &mut fresh_id, &mut compile_time_stack, &mut quantification_stack)?,
+                Op1::End => handle_rgn(&mut next_region_is_unique, label, &mut fresh_id, &mut compile_time_stack, &mut quantification_stack)?,
+                Op1::App => handle_app(pos, op, &mut compile_time_stack)?,
+                Op1::Func(n) => handle_func(n, pos, op, &mut compile_time_stack)?,
+                Op1::CTGet(i) => handle_ctget(pos, i, &mut compile_time_stack)?,
                 Op1::Lced => panic!("Lced should not appear in this context"),
                 Op1::Unpack => match compile_time_stack.pop() {
                     Some(CTStackVal::Type(Type::Exists(_id, _s, t))) => {
@@ -505,16 +370,7 @@ pub fn definition_pass(stmt: &Stmt1, types: &HashMap<Label, Type>, mut fresh_id:
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     }
                 }
-                Op1::Ptr => match compile_time_stack.pop() {
-                    Some(CTStackVal::Type(t)) => 
-                        match compile_time_stack.pop() {
-                            Some(CTStackVal::Region(r)) => compile_time_stack.push(CTStackVal::Type(Type::Ptr(Box::new(t), r))),
-                            Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Region, ctval)),
-                            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                        }
-                    Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
-                    None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                }
+                Op1::Ptr => handle_ptr(pos, op, &mut compile_time_stack)?,
                 Op1::Deref => match stack_type.pop_back() {
                     Some(Type::Ptr(t, r)) => {
                         if rgn_vars.iter().all(|r2| r.id != r2.id) {
@@ -536,6 +392,227 @@ pub fn definition_pass(stmt: &Stmt1, types: &HashMap<Label, Type>, mut fresh_id:
     }
     // wrap t in the quantifiers from kind_context
     Ok(Stmt2::Func(*label, my_type, verified_ops))
+}
+
+
+fn handle_handle(pos: u32, op: &Op1, compile_time_stack: &mut Vec<CTStackVal>) -> Result<(), Error> {
+    match compile_time_stack.pop() {
+        Some(CTStackVal::Region(r)) => {
+            compile_time_stack.push(CTStackVal::Type(Type::Handle(r)));
+            Ok(())
+        }
+        Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Region, ctval)),
+        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+    }
+}
+
+fn handle_tuple(n: &u8, pos: u32, op: &Op1, compile_time_stack: &mut Vec<CTStackVal>) -> Result<(), Error> {
+    let mut ts = vec![];
+    for _ in 0..*n {
+        match compile_time_stack.pop() {
+            Some(CTStackVal::Type(t)) => ts.push(t),
+            Some(ctval) => {
+                return Err(Error::KindError(pos, *op, Kind::Type, ctval))
+            }
+            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+        }
+    }
+    compile_time_stack.push(CTStackVal::Type(Type::Tuple(ts)));
+    Ok(())
+}
+
+fn handle_some(pos: u32, op: &Op1, compile_time_stack: &mut Vec<CTStackVal>, fresh_id: &mut u32, label: &u32, quantification_stack: &mut Vec<Quantification>) -> Result<(), Error> {
+    match compile_time_stack.pop() {
+        Some(CTStackVal::Size(s)) => {
+            let id = Id(*label, *fresh_id);
+            *fresh_id += 1;
+            compile_time_stack.push(CTStackVal::Type(Type::Var(id.clone(), s)));
+            quantification_stack.push(Quantification::Exist(id, s));
+            Ok(())
+        }
+        Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Size, ctval)),
+        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+    }
+}
+
+fn handle_all(pos: u32, op: &Op1, compile_time_stack: &mut Vec<CTStackVal>, fresh_id: &mut u32, label: &u32, quantification_stack: &mut Vec<Quantification>) -> Result<(), Error> {
+    match compile_time_stack.pop() {
+        Some(CTStackVal::Size(s)) => {
+            let id = Id(*label, *fresh_id);
+            *fresh_id += 1;
+            compile_time_stack.push(CTStackVal::Type(Type::Var(id.clone(), s)));
+            quantification_stack.push(Quantification::Forall(id, s));
+            Ok(())
+        }
+        Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Size, ctval)),
+        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+    }
+}
+
+fn handle_rgn(next_region_is_unique: &mut bool, label: &u32, fresh_id: &mut u32, compile_time_stack: &mut Vec<CTStackVal>, quantification_stack: &mut Vec<Quantification>) -> Result<(), Error> {
+    let id = Id(*label, *fresh_id);
+    let r = Region {
+        unique: *next_region_is_unique,
+        id: id,
+    };
+    *fresh_id += 1;
+    compile_time_stack.push(CTStackVal::Region(r.clone()));
+    quantification_stack.push(Quantification::Region(r));
+    Ok(())
+}
+
+fn handle_end(pos: u32, op: &Op1, compile_time_stack: &mut Vec<CTStackVal>, quantification_stack: &mut Vec<Quantification>) -> Result<(), Error> {
+    match quantification_stack.pop() {
+        Some(Quantification::Exist(id, s)) => match compile_time_stack.pop() {
+            Some(CTStackVal::Type(t)) => match compile_time_stack.pop() {
+                Some(CTStackVal::Type(Type::Var(id2, _))) if id == id2 => {
+                    compile_time_stack.push(CTStackVal::Type(Type::Exists(
+                        id,
+                        s,
+                        Box::new(t),
+                    )));
+                    Ok(())
+                }
+                Some(CTStackVal::Type(Type::Var(id2, _))) => {
+                    return Err(Error::TypeErrorSpecificTypeVarExpected(
+                        pos, *op, id, id2,
+                    ))
+                }
+                Some(CTStackVal::Type(t)) => {
+                    return Err(Error::TypeErrorTypeVarExpected(pos, *op, id, t))
+                }
+                Some(ctval) => {
+                    return Err(Error::KindError(pos, *op, Kind::Type, ctval))
+                }
+                None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+            },
+            Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
+            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+        },
+        Some(Quantification::Forall(id, s)) => match compile_time_stack.pop() {
+            Some(CTStackVal::Type(t)) => match compile_time_stack.pop() {
+                Some(CTStackVal::Type(Type::Var(id2, _))) if id == id2 => {
+                    compile_time_stack.push(CTStackVal::Type(Type::Forall(
+                        id,
+                        s,
+                        Box::new(t),
+                    )));
+                    Ok(())
+                }
+                Some(CTStackVal::Type(Type::Var(id2, _))) => {
+                    return Err(Error::TypeErrorSpecificTypeVarExpected(
+                        pos, *op, id, id2,
+                    ))
+                }
+                Some(CTStackVal::Type(t)) => {
+                    return Err(Error::TypeErrorTypeVarExpected(pos, *op, id, t))
+                }
+                Some(ctval) => {
+                    return Err(Error::KindError(pos, *op, Kind::Type, ctval))
+                }
+                None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+            },
+            Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
+            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+        },
+        Some(Quantification::Region(r)) => match compile_time_stack.pop() {
+            Some(CTStackVal::Type(t)) => match compile_time_stack.pop() {
+                Some(CTStackVal::Region(r2)) if r.id == r2.id => {
+                    compile_time_stack.push(CTStackVal::Type(Type::ForallRegion(r, Box::new(t))));
+                    Ok(())
+                }
+                Some(CTStackVal::Region(r2)) => {
+                    return Err(Error::RegionError(pos, *op, r, r2))
+                }
+                Some(ctval) => {
+                    return Err(Error::KindError(pos, *op, Kind::Region, ctval))
+                }
+                None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+            },
+            Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
+            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+        },
+        None => return Err(Error::TypeErrorEmptyQuantificationStack(pos, *op)),
+    }
+}
+
+fn handle_app(pos: u32, op: &Op1, compile_time_stack: &mut Vec<CTStackVal>) -> Result<(), Error> {
+    match compile_time_stack.pop() {
+        Some(CTStackVal::Type(t_arg)) => 
+            match compile_time_stack.pop() {
+                Some(CTStackVal::Type(Type::Forall(id, s, t))) => {
+                    if s != t_arg.size() {
+                        return Err(Error::SizeError(pos, *op, s, t_arg.size()));
+                    }
+                    let new_t = substitute_t(&*t, &HashMap::from([(id, t_arg)]), &HashMap::new());
+                    compile_time_stack.push(CTStackVal::Type(new_t));
+                    Ok(())
+                }
+                Some(CTStackVal::Type(t)) => return Err(Error::TypeErrorForallExpected(pos, *op, t)),
+                Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
+                None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+            }
+        Some(CTStackVal::Region(r_arg)) =>
+            match compile_time_stack.pop() {
+                Some(CTStackVal::Type(Type::ForallRegion(r, t))) => {
+                    let new_t = substitute_t(&*t, &HashMap::new(), &HashMap::from([(r.id, r_arg)]));
+                    compile_time_stack.push(CTStackVal::Type(new_t));
+                    Ok(())
+                }
+                Some(CTStackVal::Type(t)) => return Err(Error::TypeErrorForallRegionExpected(pos, *op, t)),
+                Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
+                None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+            }
+        Some(ctval) => return Err(Error::KindErrorBadApp(pos, *op, ctval)),
+        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+    }
+}
+
+fn handle_func(n: &u8, pos: u32, op: &Op1, compile_time_stack: &mut Vec<CTStackVal>) -> Result<(), Error> {
+    let mut ts = vec![];
+    for _ in 0..*n {
+        match compile_time_stack.pop() {
+            Some(CTStackVal::Type(t)) => ts.push(t),
+            Some(ctval) => {
+                return Err(Error::KindError(pos, *op, Kind::Type, ctval))
+            }
+            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+        }
+    }
+    compile_time_stack.push(CTStackVal::Type(Type::Func(ts)));
+    Ok(())
+}
+
+fn handle_ctget(pos: u32, i: &u8, compile_time_stack: &mut Vec<CTStackVal>) -> Result<(), Error> {
+    match compile_time_stack.get(compile_time_stack.len() - 1 - (*i) as usize) {
+        Some(ctval) => {
+            compile_time_stack.push(ctval.clone());
+            Ok(())
+        }
+        None => {
+            return Err(Error::TypeErrorCTGetOutOfRange(
+                pos,
+                *i,
+                compile_time_stack.len(),
+            ))
+        }
+    }
+}
+
+fn handle_ptr(pos: u32, op: &Op1, compile_time_stack: &mut Vec<CTStackVal>) -> Result<(), Error> {
+    match compile_time_stack.pop() {
+        Some(CTStackVal::Type(t)) => 
+            match compile_time_stack.pop() {
+                Some(CTStackVal::Region(r)) => {
+                    compile_time_stack.push(CTStackVal::Type(Type::Ptr(Box::new(t), r)));
+                    Ok(())
+                }
+                Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Region, ctval)),
+                None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+            }
+        Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
+        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+    }
 }
 
 /// Perform some variable substitutions within a type.
