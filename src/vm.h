@@ -27,16 +27,18 @@ typedef struct {
     u8 *reference;
 } Pointer;
 
+struct _Region {
+    size_t offset;
+    struct _Region *next;
+    u8 data[4096];
+};
+
 /*
  * A region (growable, nonmoving arena) of memory.
  * The type system ensures pointers into the region aren't dereferenced after the region is freed.
  * In the future I'll likely switch to a non-growing region where the size is given.
  */
-typedef struct {
-    size_t offset;
-    struct Region *next;
-    u8 data[4096];
-} Region;
+typedef struct _Region Region;
 
 typedef u8 Stack[4096];
 

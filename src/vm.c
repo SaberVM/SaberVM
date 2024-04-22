@@ -6,7 +6,7 @@
 
 // This is the runtime system for SaberVM on a 64-bit little-endian architecture.
 
-#include <vm.h>
+#include "vm.h"
 
 #define DEBUG 0
 #if DEBUG
@@ -30,7 +30,7 @@ Pointer alloc_object(Region *r, u64 size) {
     while (offset < r->offset) {
         // negative generation means free
         // the absolute value of the generation is what the last generation was, then we add one to get the current generation
-        u64 local_generation;
+        i64 local_generation;
         memcpy(&local_generation, r->data + offset, sizeof(local_generation));
         u64 local_size;
         memcpy(&local_size, r->data + offset + sizeof(local_generation), sizeof(local_size));
@@ -167,7 +167,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             dbg("print!\n");
             pc++;
             POP(i64, value);
-            printf("%d\n", value);
+            printf("%ld\n", value);
             break;
         }
         case 6: {
