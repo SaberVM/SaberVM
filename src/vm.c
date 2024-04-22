@@ -128,15 +128,25 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             pc++;
             size_t offset = instruction_param(instrs, &pc);
             size_t size = instruction_param(instrs, &pc);
-            Pointer ptr; 
-            memcpy(&ptr, stack + sp - size - sizeof(Pointer), sizeof(Pointer));
-            check_ptr(ptr);
-            memcpy(ptr.reference + offset, stack + sp - size, size);
-            sp -= size + sizeof(ptr);
-            PUSH(Pointer, ptr);
+            size_t tpl_size = instruction_param(instrs, &pc);
+            sp -= size;
+            memcpy(stack + sp - tpl_size + offset, stack + sp, size);
             break;
         }
         case 2: {
+            dbg("init in-place!\n");
+            pc++;
+            size_t offset = instruction_param(instrs, &pc);
+            size_t size = instruction_param(instrs, &pc);
+            Pointer ptr; 
+            sp -= size + sizeof(ptr);
+            memcpy(&ptr, stack + sp, sizeof(ptr));
+            check_ptr(ptr);
+            memcpy(ptr.reference + offset, stack + sp + sizeof(ptr), size);
+            PUSH(Pointer, ptr);
+            break;
+        }
+        case 3: {
             dbg("malloc!\n");
             pc++;
             size_t size = instruction_param(instrs, &pc);
@@ -144,33 +154,49 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             PUSH(Pointer, alloc_object(handle, size));
             break;
         }
-        case 3: {
+        case 4: {
+            dbg("alloca!\n");
+            pc++;
+            size_t size = instruction_param(instrs, &pc);
+            sp += size;
+            break;
+        }
+        case 5: {
             dbg("projection!\n");
             pc++;
             size_t offset = instruction_param(instrs, &pc);
             size_t size = instruction_param(instrs, &pc);
-            POP(u8*, reference);
-            POP(i64, generation);
-            Pointer ptr = {generation, reference};
+            size_t tpl_size = instruction_param(instrs, &pc);
+            sp -= tpl_size;
+            memcpy(stack + sp, stack + sp + offset, size);
+            sp += size;
+            break;
+        }
+        case 6: {
+            dbg("projection in-place!\n");
+            pc++;
+            size_t offset = instruction_param(instrs, &pc);
+            size_t size = instruction_param(instrs, &pc);
+            POP(Pointer, ptr);
             check_ptr(ptr);
             memcpy(stack + sp, ptr.reference + offset, size);
             sp += size;
             break;
         }
-        case 4: {
+        case 7: {
             dbg("call!\n");
             POP(u32, new_pc);
             pc = new_pc;
             break;
         }
-        case 5: {
+        case 8: {
             dbg("print!\n");
             pc++;
             POP(i64, value);
             printf("%ld\n", value);
             break;
         }
-        case 6: {
+        case 9: {
             dbg("literal!\n");
             pc++;
             i32 lit;
@@ -179,34 +205,34 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             PUSH(i32, lit);
             break;
         }
-        case 7: {
+        case 10: {
             dbg("global function!\n");
             pc++;
             size_t lit = instruction_param(instrs, &pc);
             PUSH(size_t, lit);
             break;
         }
-        case 8: {
+        case 11: {
             dbg("halt!\n");
             POP(i32, status_code);
             exit(status_code);
             break;
         }
-        case 9: {
+        case 12: {
             dbg("new region!\n");
             pc++;
             Region *r = new_region();
             PUSH(Region*, r);
             break;
         }
-        case 10: {
+        case 13: {
             dbg("free region!\n");
             pc++;
             POP(Region*, r);
             free_region(r);
             break;
         }
-        case 11: {
+        case 14: {
             dbg("dereference pointer!\n");
             pc++;
             size_t size = instruction_param(instrs, &pc);

@@ -54,7 +54,7 @@ pub enum Op1 {
 #[derive(Clone, Copy, Debug)]
 pub enum Op2 {
     Get(usize, usize),
-    Init(usize, usize),
+    Init(usize, usize, usize),
     InitIP(usize, usize),
     Malloc(usize),
     Alloca(usize),

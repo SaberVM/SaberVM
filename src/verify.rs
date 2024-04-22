@@ -187,7 +187,13 @@ pub fn definition_pass(
                 Op1::Init(i) => {
                     let mb_val = stack_type.pop_back();
                     let mb_tpl = stack_type.pop_back();
-                    let f = |component_types: Vec<Type>, g: &dyn Fn(&Type, Vec<Type>, &mut VecDeque<Type>, &mut Vec<Op2>) -> ()| {
+                    let f = |component_types: Vec<Type>,
+                             g: &dyn Fn(
+                        &Type,
+                        Vec<Type>,
+                        &mut VecDeque<Type>,
+                        &mut Vec<Op2>,
+                    ) -> ()| {
                         match component_types.get(usize::from(*i)) {
                             None => {
                                 return Err(Error::TypeErrorInitOutOfRange(
@@ -200,7 +206,12 @@ pub fn definition_pass(
                                 None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                                 Some(actual) => {
                                     if type_eq(formal, &actual) {
-                                        g(&actual, component_types, &mut stack_type, &mut verified_ops);
+                                        g(
+                                            &actual,
+                                            component_types,
+                                            &mut stack_type,
+                                            &mut verified_ops,
+                                        );
                                     } else {
                                         return Err(Error::TypeErrorInitTypeMismatch(
                                             pos,
@@ -214,16 +225,21 @@ pub fn definition_pass(
                         Ok(())
                     };
                     match mb_tpl {
-                        Some(Type::Tuple(component_types)) => {
-                            f(component_types, &|actual: &Type, component_types: Vec<Type>, stack_type: &mut VecDeque<Type>, verified_ops: &mut Vec<Op2>| {
+                        Some(Type::Tuple(component_types)) => f(
+                            component_types,
+                            &|actual: &Type,
+                              component_types: Vec<Type>,
+                              stack_type: &mut VecDeque<Type>,
+                              verified_ops: &mut Vec<Op2>| {
                                 let mut offset = 0;
+                                let tpl_size = component_types.iter().map(|t| t.size()).sum();
                                 for i2 in 0..*i {
                                     offset += component_types[i2 as usize].size()
                                 }
                                 stack_type.push_back(Type::Tuple(component_types));
-                                verified_ops.push(Op2::Init(offset, actual.size()));
-                            })?
-                        }
+                                verified_ops.push(Op2::Init(offset, actual.size(), tpl_size));
+                            },
+                        )?,
                         Some(Type::Ptr(boxed_t, r)) => match *boxed_t {
                             Type::Tuple(component_types) => {
                                 if rgn_vars.iter().all(|r2| r.id != r2.id) {
@@ -247,47 +263,52 @@ pub fn definition_pass(
                 }
                 Op1::Malloc => {
                     let mb_type = compile_time_stack.pop();
-                    let t = match mb_type {
-                        Some(CTStackVal::Type(t)) => t,
+                    match mb_type {
+                        Some(CTStackVal::Type(Type::Ptr(t, r))) => {
+                            match stack_type.pop_back() {
+                                Some(Type::Handle(r2)) => {
+                                    // check that t is in r and that r is in the list of declared regions
+                                    if r.id != r2.id {
+                                        return Err(Error::RegionError(pos, *op, r, r2));
+                                    }
+                                    if rgn_vars.iter().all(|r2: &Region| r.id != r2.id) {
+                                        return Err(Error::RegionAccessError(pos, *op, r));
+                                    }
+                                    let t = *t;
+                                    if let Type::Tuple(_) = t {
+                                        let size = t.size();
+                                        stack_type.push_back(t);
+                                        verified_ops.push(Op2::Malloc(size));
+                                    } else {
+                                        return Err(Error::TypeErrorMallocNonTuple(pos, *op, t));
+                                    }
+                                }
+                                Some(t) => {
+                                    return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t));
+                                }
+                                None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                            }
+                        }
+                        Some(CTStackVal::Type(Type::Tuple(component_types))) => {
+                            let t = Type::Tuple(component_types);
+                            let size = t.size();
+                            stack_type.push_back(t);
+                            verified_ops.push(Op2::Alloca(size));
+                        }
                         Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
                         None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
                     };
-                    let mb_rgn_handle = stack_type.pop_back();
-                    match mb_rgn_handle {
-                        Some(Type::Handle(r)) => {
-                            if rgn_vars.iter().all(|r2: &Region| r.id != r2.id) {
-                                return Err(Error::RegionAccessError(pos, *op, r))
-                            }
-                            if let Type::Tuple(_) = t {
-                                let size = t.size();
-                                stack_type.push_back(t);
-                                verified_ops.push(Op2::Malloc(size));
-                            } else if let Type::Ptr(boxed_t, r2) = t {
-                                let t = *boxed_t;
-                                // check that t is in r and that r is in the list of declared regions
-                                if r.id != r2.id {
-                                    return Err(Error::RegionError(pos, *op, r, r2));
-                                }
-                                if let Type::Tuple(_) = t {
-                                    let size = t.size();
-                                    stack_type.push_back(Type::Ptr(Box::new(t), r2));
-                                    verified_ops.push(Op2::Alloca(size));
-                                } else {
-                                    return Err(Error::TypeErrorMallocNonTuple(pos, *op, t));
-                                }
-                            } else {
-                                return Err(Error::TypeErrorMallocNonTuple(pos, *op, t));
-                            }
-                        }
-                        Some(t) => {
-                            return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t));
-                        }
-                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    }
                 }
                 Op1::Proj(i) => {
                     let mb_tpl = stack_type.pop_back();
-                    let mut f = |component_types: Vec<Type>, g: &dyn Fn(&Type, usize, &mut VecDeque<Type>, &mut Vec<Op2>, Vec<Type>)->()| {
+                    let mut f = |component_types: Vec<Type>,
+                                 g: &dyn Fn(
+                        &Type,
+                        usize,
+                        &mut VecDeque<Type>,
+                        &mut Vec<Op2>,
+                        Vec<Type>,
+                    ) -> ()| {
                         let s: usize = component_types.iter().map(|t| t.size()).sum();
                         let mb_t = component_types.get(usize::from(*i)).cloned();
                         match mb_t {
@@ -331,7 +352,7 @@ pub fn definition_pass(
                                             verified_ops.push(Op2::ProjIP(offset, t.size()));
                                         })?;
                                     }
-                                    t => return Err(Error::TypeErrorTupleExpected(pos, *op, t))
+                                    t => return Err(Error::TypeErrorTupleExpected(pos, *op, t)),
                                 }
                             }
                             t => return Err(Error::TypeErrorTupleExpected(pos, *op, t)),

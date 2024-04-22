@@ -53,10 +53,11 @@ fn op_to_bytes(op: &Op2) -> Vec<u8> {
             size.to_le_bytes().to_vec(),
         ]
         .concat(),
-        Op2::Init(offset, size) => [
+        Op2::Init(offset, size, tpl_size) => [
             vec![1],
             offset.to_le_bytes().to_vec(),
             size.to_le_bytes().to_vec(),
+            tpl_size.to_le_bytes().to_vec(),
         ]
         .concat(),
         Op2::InitIP(offset, size) => [
