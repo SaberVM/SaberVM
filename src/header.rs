@@ -55,8 +55,11 @@ pub enum Op1 {
 pub enum Op2 {
     Get(usize, usize),
     Init(usize, usize),
+    InitIP(usize, usize),
     Malloc(usize),
+    Alloca(usize),
     Proj(usize, usize, usize),
+    ProjIP(usize, usize),
     Call,
     Print,
     Lit(i32),

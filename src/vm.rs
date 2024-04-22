@@ -47,69 +47,46 @@ fn merge_stmts(stmts: Vec<Stmt2>) -> Vec<u8> {
 
 fn op_to_bytes(op: &Op2) -> Vec<u8> {
     match op {
-        Op2::Get(offset, size) => vec![
-            0,
-            (*offset >> 24) as u8,
-            (*offset >> 16) as u8,
-            (*offset >> 8) as u8,
-            *offset as u8,
-            (*size >> 24) as u8,
-            (*size >> 16) as u8,
-            (*size >> 8) as u8,
-            *size as u8,
-        ],
-        Op2::Init(offset, size) => vec![
-            1,
-            (*offset >> 24) as u8,
-            (*offset >> 16) as u8,
-            (*offset >> 8) as u8,
-            *offset as u8,
-            (*size >> 24) as u8,
-            (*size >> 16) as u8,
-            (*size >> 8) as u8,
-            *size as u8,
-        ],
-        Op2::Malloc(size) => vec![
-            2,
-            (*size >> 24) as u8,
-            (*size >> 16) as u8,
-            (*size >> 8) as u8,
-            *size as u8,
-        ],
-        Op2::Proj(offset, size, tpl_size) => vec![
-            3,
-            (*offset >> 24) as u8,
-            (*offset >> 16) as u8,
-            (*offset >> 8) as u8,
-            *offset as u8,
-            (*size >> 24) as u8,
-            (*size >> 16) as u8,
-            (*size >> 8) as u8,
-            *size as u8,
-            (*tpl_size >> 24) as u8,
-            (*tpl_size >> 16) as u8,
-            (*tpl_size >> 8) as u8,
-            *tpl_size as u8,
-        ],
-        Op2::Call => vec![4],
-        Op2::Print => vec![5],
-        Op2::Lit(lit) => [vec![6], lit.to_le_bytes().to_vec()].concat(),
-        Op2::GlobalFunc(label) => vec![
-            7,
-            (*label >> 24) as u8,
-            (*label >> 16) as u8,
-            (*label >> 8) as u8,
-            *label as u8,
-        ],
-        Op2::Halt => vec![8],
-        Op2::NewRgn => vec![9],
-        Op2::FreeRgn => vec![10],
-        Op2::Deref(size) => vec![
-            11,
-            (*size >> 24) as u8,
-            (*size >> 16) as u8,
-            (*size >> 8) as u8,
-            *size as u8,
-        ],
+        Op2::Get(offset, size) => [
+            vec![0],
+            offset.to_le_bytes().to_vec(),
+            size.to_le_bytes().to_vec(),
+        ]
+        .concat(),
+        Op2::Init(offset, size) => [
+            vec![1],
+            offset.to_le_bytes().to_vec(),
+            size.to_le_bytes().to_vec(),
+        ]
+        .concat(),
+        Op2::InitIP(offset, size) => [
+            vec![2],
+            offset.to_le_bytes().to_vec(),
+            size.to_le_bytes().to_vec(),
+        ]
+        .concat(),
+        Op2::Malloc(size) => [vec![3], size.to_le_bytes().to_vec()].concat(),
+        Op2::Alloca(size) => [vec![4], size.to_le_bytes().to_vec()].concat(),
+        Op2::Proj(offset, size, tpl_size) => [
+            vec![5],
+            offset.to_le_bytes().to_vec(),
+            size.to_le_bytes().to_vec(),
+            tpl_size.to_le_bytes().to_vec(),
+        ]
+        .concat(),
+        Op2::ProjIP(offset, size) => [
+            vec![6],
+            offset.to_le_bytes().to_vec(),
+            size.to_le_bytes().to_vec(),
+        ]
+        .concat(),
+        Op2::Call => vec![7],
+        Op2::Print => vec![8],
+        Op2::Lit(lit) => [vec![9], lit.to_le_bytes().to_vec()].concat(),
+        Op2::GlobalFunc(label) => [vec![10], label.to_le_bytes().to_vec()].concat(),
+        Op2::Halt => vec![11],
+        Op2::NewRgn => vec![12],
+        Op2::FreeRgn => vec![13],
+        Op2::Deref(size) => [vec![14], size.to_le_bytes().to_vec()].concat(),
     }
 }
