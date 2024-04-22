@@ -17,7 +17,7 @@ fn go(bytes: header::ByteStream) -> Result<(), header::Error> {
     vm::go(stmts);
     Ok(())
 }
- 
+
 fn main() {
     // get the bytes from the local bin.svm file (later this will be a CLI arg of course)
     let bytes: header::ByteStream = fs::read("bin.svm").unwrap();

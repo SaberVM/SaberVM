@@ -140,7 +140,10 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
     Ok((lexed_opcodes, n))
 }
 
-fn parse_forward_decs(tokens: &LexedOpcodes, n: u32) -> Result<(Vec<ForwardDec>, std::slice::Iter<'_, Op1>), Error> {
+fn parse_forward_decs(
+    tokens: &LexedOpcodes,
+    n: u32,
+) -> Result<(Vec<ForwardDec>, std::slice::Iter<'_, Op1>), Error> {
     let mut forward_decs = vec![];
     let mut tokens_iter = tokens.iter();
     let mut current_stmt_opcodes = vec![];
@@ -192,6 +195,6 @@ pub fn go(istream: &ByteStream) -> Result<(Vec<ForwardDec>, Vec<Stmt1>), Error> 
     // this is two-pass currently (lex and parse); it would be straightforward to fuse these passes.
     let (tokens, n) = lex(istream)?;
     let (forward_decs, rest) = parse_forward_decs(&tokens, n)?;
-    let stmts = parse(rest, n)?; 
+    let stmts = parse(rest, n)?;
     Ok((forward_decs, stmts))
 }

@@ -147,7 +147,7 @@ impl CTStackVal {
 pub enum Quantification {
     Region(Region),
     Forall(Id, usize),
-    Exist(Id, usize)
+    Exist(Id, usize),
 }
 
 /// The type for user-facing errors (as opposed to internal SaberVM errors, which are panics).
