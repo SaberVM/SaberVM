@@ -83,7 +83,10 @@ pub fn type_pass(stmt: &ForwardDec, mut fresh_id: u32) -> Result<(Label, Type, u
         }
         pos += 1;
     }
-    todo!()
+    match &compile_time_stack[..] {
+        [CTStackVal::Type(t)] => Ok((*label, t.clone(), pos)),
+        _ => panic!()
+    }
 }
 
 pub fn definition_pass(

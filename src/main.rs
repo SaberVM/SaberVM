@@ -9,7 +9,9 @@ mod parse;
 mod verify;
 mod vm;
 
-use std::fs;
+// use std::fs;
+
+const BYTES: [u8; 23] = [0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x09, 0x00, 0x0B, 0x13, 0x07, 0x00, 0x00, 0x00, 0x12, 0x13, 0x00, 0x00, 0x00, 0x00, 0x15];
 
 fn go(bytes: header::ByteStream) -> Result<(), header::Error> {
     let (types_instrs, unverified_stmts) = parse::go(&bytes)?;
@@ -20,7 +22,7 @@ fn go(bytes: header::ByteStream) -> Result<(), header::Error> {
 
 fn main() {
     // get the bytes from the local bin.svm file (later this will be a CLI arg of course)
-    let bytes: header::ByteStream = fs::read("bin.svm").unwrap();
-    let res = go(bytes);
+    // let bytes: header::ByteStream = fs::read("bin.svm").unwrap();
+    let res = go(BYTES.to_vec());
     let _ = dbg!(res);
 }

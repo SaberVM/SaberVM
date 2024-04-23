@@ -55,8 +55,8 @@ Pointer alloc_object(Region *r, u64 size) {
         memcpy(r->data + r->offset + sizeof(first_generation), &size, sizeof(size));
         Pointer ptr = {first_generation, &(r->data[r->offset])};
         r->offset += METADATA_OFFSET + size;
-        dbg("ptr: %llu\n", (u64)(r->data));
-        dbg("ptr: %lld, %llu.\n", ptr.generation, (u64)(ptr.reference));
+        dbg("ptr: %lu\n", (u64)(r->data));
+        dbg("ptr: %ld, %lu.\n", ptr.generation, (u64)(ptr.reference));
         return ptr;
     }
 }
@@ -65,7 +65,7 @@ void check_ptr(Pointer ptr) {
     i64 g;
     memcpy(&g, &ptr.reference - METADATA_OFFSET, sizeof(g));
     if (ptr.generation != g) {
-        dbg("%lld != %lld\n", ptr.generation, g);
+        dbg("%ld != %ld\n", ptr.generation, g);
         printf("Runtime error! The program is trying to access memory that's already been freed!\n");
         exit(1); // this will be a jump to exception handler soon
     }
@@ -95,8 +95,8 @@ size_t instruction_param(u8 instrs[], u32 *pc) {
 
 #define POP(t, name) \
     t name; \
-    memcpy(&name, stack + sp, sizeof(name)); \
-    sp -= sizeof(name);
+    sp -= sizeof(name); \
+    memcpy(&name, stack + sp, sizeof(name));
 
 #define PUSH(t, e) \
         {t x = e; \
@@ -192,8 +192,8 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 8: {
             dbg("print!\n");
             pc++;
-            POP(i64, value);
-            printf("%ld\n", value);
+            POP(i32, value);
+            printf("%d\n", value);
             break;
         }
         case 9: {
@@ -201,6 +201,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             pc++;
             i32 lit;
             memcpy(&lit, instrs + pc, sizeof(lit));
+            dbg("%d\n", lit);
             pc += sizeof(lit);
             PUSH(i32, lit);
             break;

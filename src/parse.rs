@@ -81,10 +81,10 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
                             Some(n3) => match bytes_iter.next() {
                                 None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                                 Some(n4) => Op1::Lit(
-                                    ((*n1 as u32) << 24
-                                        | (*n2 as u32) << 16
-                                        | (*n3 as u32) << 8
-                                        | (*n4 as u32)) as i32,
+                                    ((*n4 as u32) << 24
+                                        | (*n3 as u32) << 16
+                                        | (*n2 as u32) << 8
+                                        | (*n1 as u32)) as i32,
                                 ),
                             },
                         },
@@ -99,10 +99,10 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
                             Some(n3) => match bytes_iter.next() {
                                 None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                                 Some(n4) => Op1::GlobalFunc(
-                                    (*n1 as u32) << 24
-                                        | (*n2 as u32) << 16
-                                        | (*n3 as u32) << 8
-                                        | (*n4 as u32),
+                                    (*n4 as u32) << 24
+                                        | (*n3 as u32) << 16
+                                        | (*n2 as u32) << 8
+                                        | (*n1 as u32),
                                 ),
                             },
                         },
@@ -119,10 +119,10 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
                             Some(n3) => match bytes_iter.next() {
                                 None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                                 Some(n4) => Op1::Size(
-                                    (*n1 as u32) << 24
-                                        | (*n2 as u32) << 16
-                                        | (*n3 as u32) << 8
-                                        | (*n4 as u32),
+                                    (*n4 as u32) << 24
+                                        | (*n3 as u32) << 16
+                                        | (*n2 as u32) << 8
+                                        | (*n1 as u32),
                                 ),
                             },
                         },
@@ -185,6 +185,7 @@ fn parse(mut tokens_iter: std::slice::Iter<'_, Op1>, n: u32) -> Result<Vec<Stmt1
         }
     }
     if current_stmt_opcodes.len() > 0 {
+        dbg!(current_stmt_opcodes);
         panic!("this shouldn't be a panic either");
     }
     Ok(parsed_stmts)
