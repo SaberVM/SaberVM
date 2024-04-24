@@ -148,6 +148,7 @@ impl CTStackVal {
     // }
 }
 
+#[derive(Debug)]
 pub enum Quantification {
     Region(Region),
     Forall(Id, usize),

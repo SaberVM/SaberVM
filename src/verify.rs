@@ -110,6 +110,11 @@ pub fn definition_pass(
 
     // The list of region variables the function is quantified (polymorphic) over.
     let mut rgn_vars: Vec<Region> = vec![];
+    for ctval in &compile_time_stack {
+        if let CTStackVal::Region(r) = ctval {
+            rgn_vars.push(r.clone());
+        }
+    }
 
     // The variable tracking the current byte position, for nice error reporting.
     let mut pos = *label;
@@ -867,7 +872,11 @@ fn setup_verifier(t: &Type) -> Result<(VecDeque<CTStackVal>, VecDeque<Type>), Er
             ct_stack.push_front(CTStackVal::Region(*r));
             Ok((ct_stack, param_types))
         }
-        Type::Func(param_ts) => Ok((VecDeque::new(), param_ts.to_vec().into())),
+        Type::Func(param_ts) => {
+            let mut param_ts = param_ts.to_vec();
+            param_ts.reverse();
+            Ok((VecDeque::new(), param_ts.into()))
+        }
         _ => panic!("this should be an Err"),
     }
 }
