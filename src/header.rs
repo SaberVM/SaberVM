@@ -70,6 +70,7 @@ pub enum Op2 {
     Deref(usize),
 }
 
+#[derive(Debug)]
 pub enum ForwardDec {
     Func(Pos, Vec<Op1>),
 }

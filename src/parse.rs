@@ -171,17 +171,17 @@ fn parse(mut tokens_iter: std::slice::Iter<'_, Op1>, n: u32) -> Result<Vec<Stmt1
                 None => break,
                 Some(Op1::Call) => {
                     current_stmt_opcodes.push(Op1::Call);
-                    parsed_stmts.push(Stmt1::Func(i, current_stmt_opcodes));
-                    current_stmt_opcodes = vec![];
+                    break;
                 }
                 Some(Op1::Halt) => {
                     current_stmt_opcodes.push(Op1::Halt);
-                    parsed_stmts.push(Stmt1::Func(i, current_stmt_opcodes));
-                    current_stmt_opcodes = vec![];
+                    break;
                 }
                 Some(op) => current_stmt_opcodes.push(*op),
             }
         }
+        parsed_stmts.push(Stmt1::Func(i, current_stmt_opcodes));
+        current_stmt_opcodes = vec![];
     }
     if current_stmt_opcodes.len() > 0 {
         dbg!(current_stmt_opcodes);
