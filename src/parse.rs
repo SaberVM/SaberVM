@@ -147,7 +147,6 @@ fn parse_forward_decs(
     let mut forward_decs = vec![];
     let mut tokens_iter = tokens.iter();
     let mut current_stmt_opcodes = vec![];
-
     for i in 0..n {
         loop {
             match tokens_iter.next() {
