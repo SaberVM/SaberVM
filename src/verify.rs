@@ -311,9 +311,13 @@ pub fn definition_pass(
                                         return Err(Error::RegionAccessError(pos, *op, r));
                                     }
                                     let t = *t;
-                                    if let Type::Tuple(_) = t {
-                                        let size = t.size();
-                                        stack_type.push_back(Type::Ptr(Box::new(t), r));
+                                    let size = t.size();
+                                    if let Type::Tuple(component_types) = t {
+                                        let mut ts = vec![];
+                                        for (_, t) in component_types {
+                                            ts.push((false, t));
+                                        }
+                                        stack_type.push_back(Type::Ptr(Box::new(Type::Tuple(ts)), r));
                                         verified_ops.push(Op2::Malloc(size));
                                     } else {
                                         return Err(Error::TypeErrorMallocNonTuple(pos, *op, t));
@@ -326,7 +330,11 @@ pub fn definition_pass(
                             }
                         }
                         Some(CTStackVal::Type(Type::Tuple(component_types))) => {
-                            let t = Type::Tuple(component_types);
+                            let mut ts = vec![];
+                            for (_, t) in component_types {
+                                ts.push((false, t))
+                            }
+                            let t = Type::Tuple(ts);
                             let size = t.size();
                             stack_type.push_back(t);
                             verified_ops.push(Op2::Alloca(size));
@@ -617,7 +625,7 @@ fn handle_tuple(
     let mut ts = vec![];
     for _ in 0..*n {
         match compile_time_stack.pop() {
-            Some(CTStackVal::Type(t)) => ts.push((false, t)),
+            Some(CTStackVal::Type(t)) => ts.push((true, t)),
             Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
             None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
         }
@@ -838,9 +846,9 @@ pub fn type_eq(type1: &Type, type2: &Type) -> bool {
         (Type::Tuple(ts1), Type::Tuple(ts2)) => {
             ts1.len() == ts2.len() && {
                 let mut ts2 = ts2.iter();
-                for (_, t1) in ts1 {
-                    let (_, t2) = ts2.next().unwrap();
-                    if !type_eq(t1, t2) {
+                for (init1, t1) in ts1 {
+                    let (init2, t2) = ts2.next().unwrap();
+                    if init1 != init2 || !type_eq(t1, t2) {
                         return false;
                     }
                 }
