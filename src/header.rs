@@ -98,7 +98,7 @@ pub struct Region {
 pub enum Type {
     I32,
     Handle(Region),
-    Tuple(Vec<Type>),
+    Tuple(Vec<(bool, Type)>),
     Ptr(Box<Type>, Region),
     Var(Id, usize),
     Func(Vec<Type>),
@@ -112,7 +112,7 @@ impl Type {
         match self {
             Self::I32 => 4,
             Self::Handle(_r) => 8,
-            Self::Tuple(ts) => ts.iter().map(|t| t.size()).sum(),
+            Self::Tuple(ts) => ts.iter().map(|(_, t)| t.size()).sum(),
             Self::Ptr(_t, _r) => 16,
             Self::Var(_id, s) => *s,
             Self::Func(_param_ts) => 4,
@@ -189,4 +189,6 @@ pub enum Error {
     TypeErrorForallExpected(Pos, Op1, Type),
     TypeErrorForallRegionExpected(Pos, Op1, Type),
     KindErrorBadApp(Pos, Op1, CTStackVal),
+    TypeErrorDoubleInit(Pos, Op1, u8),
+    TypeErrorUninitializedRead(Pos, Op1, u8)
 }

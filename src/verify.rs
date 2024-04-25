@@ -218,10 +218,10 @@ pub fn definition_pass(
                 Op1::Init(i) => {
                     let mb_val = stack_type.pop_back();
                     let mb_tpl = stack_type.pop_back();
-                    let f = |component_types: Vec<Type>,
+                    let f = |component_types: Vec<(bool, Type)>,
                              g: &dyn Fn(
                         &Type,
-                        Vec<Type>,
+                        Vec<(bool, Type)>,
                         &mut VecDeque<Type>,
                         &mut Vec<Op2>,
                     ) -> ()| {
@@ -233,7 +233,7 @@ pub fn definition_pass(
                                     component_types.len(),
                                 ))
                             }
-                            Some(formal) => match mb_val {
+                            Some((false, formal)) => match mb_val {
                                 None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                                 Some(actual) => {
                                     if type_eq(formal, &actual) {
@@ -251,7 +251,8 @@ pub fn definition_pass(
                                         ));
                                     }
                                 }
-                            },
+                            }
+                            Some((true, _t)) => return Err(Error::TypeErrorDoubleInit(pos, *op, *i))
                         }
                         Ok(())
                     };
@@ -259,14 +260,16 @@ pub fn definition_pass(
                         Some(Type::Tuple(component_types)) => f(
                             component_types,
                             &|actual: &Type,
-                              component_types: Vec<Type>,
+                              mut component_types: Vec<(bool, Type)>,
                               stack_type: &mut VecDeque<Type>,
                               verified_ops: &mut Vec<Op2>| {
                                 let mut offset = 0;
-                                let tpl_size = component_types.iter().map(|t| t.size()).sum();
+                                let tpl_size = component_types.iter().map(|(_, t)| t.size()).sum();
                                 for i2 in 0..*i {
-                                    offset += component_types[i2 as usize].size()
+                                    let (_, t) = &component_types[i2 as usize];
+                                    offset += t.size();
                                 }
+                                component_types[*i as usize] = (true, actual.clone());
                                 stack_type.push_back(Type::Tuple(component_types));
                                 verified_ops.push(Op2::Init(offset, actual.size(), tpl_size));
                             },
@@ -276,11 +279,13 @@ pub fn definition_pass(
                                 if rgn_vars.iter().all(|r2| r.id != r2.id) {
                                     return Err(Error::RegionAccessError(pos, *op, r));
                                 }
-                                f(component_types, &|actual: &Type, component_types: Vec<Type>, stack_type: &mut VecDeque<Type>, verified_ops: &mut Vec<Op2>| {
+                                f(component_types, &|actual: &Type, mut component_types: Vec<(bool, Type)>, stack_type: &mut VecDeque<Type>, verified_ops: &mut Vec<Op2>| {
                                     let mut offset = 0;
                                     for i2 in 0..*i {
-                                        offset += component_types[i2 as usize].size()
+                                        let (_, t) = &component_types[i2 as usize];
+                                        offset += t.size();
                                     }
+                                    component_types[*i as usize] = (true, actual.clone());
                                     stack_type.push_back(Type::Ptr(Box::new(Type::Tuple(component_types)), r));
                                     verified_ops
                                         .push(Op2::InitIP(offset, actual.size()));
@@ -332,15 +337,15 @@ pub fn definition_pass(
                 }
                 Op1::Proj(i) => {
                     let mb_tpl = stack_type.pop_back();
-                    let mut f = |component_types: Vec<Type>,
+                    let mut f = |component_types: Vec<(bool, Type)>,
                                  g: &dyn Fn(
                         &Type,
                         usize,
                         &mut VecDeque<Type>,
                         &mut Vec<Op2>,
-                        Vec<Type>,
+                        Vec<(bool, Type)>,
                     ) -> ()| {
-                        let s: usize = component_types.iter().map(|t| t.size()).sum();
+                        let s: usize = component_types.iter().map(|(_, t)| t.size()).sum();
                         let mb_t = component_types.get(usize::from(*i)).cloned();
                         match mb_t {
                             None => {
@@ -350,19 +355,21 @@ pub fn definition_pass(
                                     component_types.len(),
                                 ))
                             }
-                            Some(t) => {
+                            Some((true, t)) => {
                                 g(&t, s, &mut stack_type, &mut verified_ops, component_types)
                             }
+                            Some((false, _)) => return Err(Error::TypeErrorUninitializedRead(pos, *op, *i))
                         }
                         Ok(())
                     };
                     match mb_tpl {
                         Some(tpl) => match tpl {
                             Type::Tuple(component_types) => {
-                                f(component_types, &|t: &Type, s: usize, stack_type: &mut VecDeque<Type>, verified_ops: &mut Vec<Op2>, component_types: Vec<Type>| {
+                                f(component_types, &|t: &Type, s: usize, stack_type: &mut VecDeque<Type>, verified_ops: &mut Vec<Op2>, component_types: Vec<(bool, Type)>| {
                                     let mut offset = 0;
                                     for i2 in 0..*i {
-                                        offset += component_types[i2 as usize].size();
+                                        let (_, t) = &component_types[i2 as usize];
+                                        offset += t.size();
                                     }
                                     stack_type.push_back(t.clone());
                                     verified_ops.push(Op2::Proj(offset, t.size(), s));
@@ -374,10 +381,11 @@ pub fn definition_pass(
                                 }
                                 match *boxed_t {
                                     Type::Tuple(component_types) => {
-                                        f(component_types, &|t: &Type, _s: usize, stack_type: &mut VecDeque<Type>, verified_ops: &mut Vec<Op2>, component_types: Vec<Type>| {
+                                        f(component_types, &|t: &Type, _s: usize, stack_type: &mut VecDeque<Type>, verified_ops: &mut Vec<Op2>, component_types: Vec<(bool, Type)>| {
                                             let mut offset = 0;
                                             for i2 in 0..*i {
-                                                offset += component_types[i2 as usize].size();
+                                                let (_, t) = &component_types[i2 as usize];
+                                                offset += t.size();
                                             }
                                             stack_type.push_back(t.clone());
                                             verified_ops.push(Op2::ProjIP(offset, t.size()));
@@ -609,7 +617,7 @@ fn handle_tuple(
     let mut ts = vec![];
     for _ in 0..*n {
         match compile_time_stack.pop() {
-            Some(CTStackVal::Type(t)) => ts.push(t),
+            Some(CTStackVal::Type(t)) => ts.push((false, t)),
             Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
             None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
         }
@@ -793,7 +801,7 @@ pub fn substitute_t(typ: &Type, tsubs: &HashMap<Id, Type>, rsubs: &HashMap<Id, R
     match typ {
         Type::I32 => Type::I32,
         Type::Handle(r) => Type::Handle(substitute_r(r, rsubs)),
-        Type::Tuple(ts) => Type::Tuple(ts.iter().map(|t| substitute_t(t, tsubs, rsubs)).collect()),
+        Type::Tuple(ts) => Type::Tuple(ts.iter().map(|(init, t)| (*init, substitute_t(t, tsubs, rsubs))).collect()),
         Type::Ptr(t, r) => Type::Ptr(
             Box::new(substitute_t(t, tsubs, rsubs)),
             substitute_r(r, rsubs),
@@ -830,8 +838,8 @@ pub fn type_eq(type1: &Type, type2: &Type) -> bool {
         (Type::Tuple(ts1), Type::Tuple(ts2)) => {
             ts1.len() == ts2.len() && {
                 let mut ts2 = ts2.iter();
-                for t1 in ts1 {
-                    let t2 = ts2.next().unwrap();
+                for (_, t1) in ts1 {
+                    let (_, t2) = ts2.next().unwrap();
                     if !type_eq(t1, t2) {
                         return false;
                     }
