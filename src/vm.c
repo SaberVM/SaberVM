@@ -8,7 +8,7 @@
 
 #include "vm.h"
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #define dbg(...) printf(__VA_ARGS__)
 #else
@@ -86,12 +86,10 @@ void free_region(Region *r) {
     free(r);
 }
 
-size_t instruction_param(u8 instrs[], u32 *pc) {
-    size_t value;
-    memcpy(&value, instrs + *pc, sizeof(value));
-    *pc += sizeof(value);
-    return value;
-}
+#define INSTR_PARAM(t, name) \
+    t name; \
+    memcpy(&name, instrs + pc, sizeof(name)); \
+    pc += sizeof(name); \
 
 #define POP(t, name) \
     t name; \
@@ -117,8 +115,8 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 0: {
             dbg("get!\n");
             pc++;
-            size_t offset = instruction_param(instrs, &pc);
-            size_t size = instruction_param(instrs, &pc);
+            INSTR_PARAM(size_t, offset);
+            INSTR_PARAM(size_t, size);
             memcpy(stack + sp, stack + sp - offset - size, size);
             sp += size;
             break;
@@ -126,9 +124,9 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 1: {
             dbg("init!\n");
             pc++;
-            size_t offset = instruction_param(instrs, &pc);
-            size_t size = instruction_param(instrs, &pc);
-            size_t tpl_size = instruction_param(instrs, &pc);
+            INSTR_PARAM(size_t, offset);
+            INSTR_PARAM(size_t, size);
+            INSTR_PARAM(size_t, tpl_size);
             sp -= size;
             memcpy(stack + sp - tpl_size + offset, stack + sp, size);
             break;
@@ -136,8 +134,8 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 2: {
             dbg("init in-place!\n");
             pc++;
-            size_t offset = instruction_param(instrs, &pc);
-            size_t size = instruction_param(instrs, &pc);
+            INSTR_PARAM(size_t, offset);
+            INSTR_PARAM(size_t, size);
             Pointer ptr; 
             sp -= size + sizeof(ptr);
             memcpy(&ptr, stack + sp, sizeof(ptr));
@@ -149,7 +147,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 3: {
             dbg("malloc!\n");
             pc++;
-            size_t size = instruction_param(instrs, &pc);
+            INSTR_PARAM(size_t, size);
             POP(Region*, handle);
             PUSH(Pointer, alloc_object(handle, size));
             break;
@@ -157,16 +155,16 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 4: {
             dbg("alloca!\n");
             pc++;
-            size_t size = instruction_param(instrs, &pc);
+            INSTR_PARAM(size_t, size);
             sp += size;
             break;
         }
         case 5: {
             dbg("projection!\n");
             pc++;
-            size_t offset = instruction_param(instrs, &pc);
-            size_t size = instruction_param(instrs, &pc);
-            size_t tpl_size = instruction_param(instrs, &pc);
+            INSTR_PARAM(size_t, offset);
+            INSTR_PARAM(size_t, size);
+            INSTR_PARAM(size_t, tpl_size);
             sp -= tpl_size;
             memcpy(stack + sp, stack + sp + offset, size);
             sp += size;
@@ -175,8 +173,8 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 6: {
             dbg("projection in-place!\n");
             pc++;
-            size_t offset = instruction_param(instrs, &pc);
-            size_t size = instruction_param(instrs, &pc);
+            INSTR_PARAM(size_t, offset);
+            INSTR_PARAM(size_t, size);
             POP(Pointer, ptr);
             check_ptr(ptr);
             memcpy(stack + sp, ptr.reference + offset, size);
@@ -209,8 +207,8 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 10: {
             dbg("global function!\n");
             pc++;
-            size_t lit = instruction_param(instrs, &pc);
-            PUSH(size_t, lit);
+            INSTR_PARAM(u32, lit);
+            PUSH(u32, lit);
             break;
         }
         case 11: {
@@ -236,7 +234,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 14: {
             dbg("dereference pointer!\n");
             pc++;
-            size_t size = instruction_param(instrs, &pc);
+            INSTR_PARAM(size_t, size);
             POP(Pointer, ptr);
             check_ptr(ptr);
             memcpy(stack + sp, ptr.reference, size);
