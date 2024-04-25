@@ -115,7 +115,7 @@ impl Type {
             Self::Tuple(ts) => ts.iter().map(|t| t.size()).sum(),
             Self::Ptr(_t, _r) => 16,
             Self::Var(_id, s) => *s,
-            Self::Func(_param_ts) => 8,
+            Self::Func(_param_ts) => 4,
             Self::Forall(_id, _size, t) => t.size(),
             Self::ForallRegion(_r, t) => t.size(),
             Self::Exists(_id, _size, t) => t.size(),

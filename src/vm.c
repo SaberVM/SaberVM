@@ -8,14 +8,14 @@
 
 #include "vm.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #if DEBUG
 #define dbg(...) printf(__VA_ARGS__)
 #else
 #define dbg(...)
 #endif
 
-#define METADATA_OFFSET sizeof(u64) + sizeof(u64)
+#define METADATA_OFFSET (sizeof(u64) + sizeof(u64))
 
 Region *new_region() {
     Region *r = malloc(sizeof(Region));
@@ -53,17 +53,26 @@ Pointer alloc_object(Region *r, u64 size) {
         i64 first_generation = 1;
         memcpy(r->data + r->offset, &first_generation, sizeof(first_generation));
         memcpy(r->data + r->offset + sizeof(first_generation), &size, sizeof(size));
-        Pointer ptr = {first_generation, &(r->data[r->offset])};
+        Pointer ptr = {first_generation, &(r->data[r->offset]) + METADATA_OFFSET};
+        dbg("alloc object: gen: %ld, size: %lu\n", ptr.generation, size);
         r->offset += METADATA_OFFSET + size;
-        dbg("ptr: %lu\n", (u64)(r->data));
-        dbg("ptr: %ld, %lu.\n", ptr.generation, (u64)(ptr.reference));
+        for (size_t i = 0; i < r->offset; i++) {
+            dbg(" %d", r->data[i]);
+        }
+        dbg("\n");
         return ptr;
     }
 }
 
 void check_ptr(Pointer ptr) {
+    dbg("check ptr:\n");
+    for (int i = 0; i < 20; i++) {
+        dbg(" %d",  *(u8*)(ptr.reference - METADATA_OFFSET - 16 + i));
+    }
+    dbg("\n");
     i64 g;
-    memcpy(&g, &ptr.reference - METADATA_OFFSET, sizeof(g));
+    memcpy(&g, ptr.reference - METADATA_OFFSET, sizeof(g));
+    dbg("check generation %ld\n", g);
     if (ptr.generation != g) {
         dbg("%ld != %ld\n", ptr.generation, g);
         printf("Runtime error! The program is trying to access memory that's already been freed!\n");
@@ -110,7 +119,11 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
     u8 sp = 0;
     Stack stack;
     while (1) {
-        dbg("pc: %d\n", pc);
+        dbg("pc: %d, sp: %d\n", pc, sp);
+        for (u32 i = 0; i < sp; i++) {
+            dbg(" %d", stack[i]);
+        }
+        dbg("\n");
         switch (instrs[pc]) {
         case 0: {
             dbg("get!\n");
@@ -197,10 +210,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 9: {
             dbg("literal!\n");
             pc++;
-            i32 lit;
-            memcpy(&lit, instrs + pc, sizeof(lit));
-            dbg("%d\n", lit);
-            pc += sizeof(lit);
+            INSTR_PARAM(i32, lit);
             PUSH(i32, lit);
             break;
         }

@@ -308,7 +308,7 @@ pub fn definition_pass(
                                     let t = *t;
                                     if let Type::Tuple(_) = t {
                                         let size = t.size();
-                                        stack_type.push_back(t);
+                                        stack_type.push_back(Type::Ptr(Box::new(t), r));
                                         verified_ops.push(Op2::Malloc(size));
                                     } else {
                                         return Err(Error::TypeErrorMallocNonTuple(pos, *op, t));
@@ -491,12 +491,6 @@ pub fn definition_pass(
                                 Some(_r2) => return Err(Error::UniquenessError(pos, *op, r)),
                                 None => return Err(Error::RegionAccessError(pos, *op, r)),
                             }
-                            // TODO: don't check the local variable, check the declarations of the function
-                            // Then we can remove the declaration to avoid use-after-free and double-free
-                            if !r.unique {
-                                return Err(Error::UniquenessError(pos, *op, r));
-                            }
-                            verified_ops.push(Op2::FreeRgn);
                         }
                         Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
