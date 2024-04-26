@@ -172,9 +172,15 @@ pub fn definition_pass(
                     },
                     Some(CTStackVal::Region(r_arg)) => match stack_type.pop() {
                         Some(Type::ForallRegion(r, t)) => {
+                            if rgn_vars.iter().all(|r2| r_arg.id != r2.id) {
+                                return Err(Error::RegionAccessError(pos, *op, r_arg));
+                            }
                             let new_t =
                                 substitute_t(&*t, &HashMap::new(), &HashMap::from([(r.id, r_arg)]));
                             stack_type.push(new_t);
+                            if r_arg.unique {
+                                rgn_vars.retain(|r2| r2.id != r_arg.id);
+                            }
                         }
                         Some(t) => return Err(Error::TypeErrorForallRegionExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
@@ -408,7 +414,7 @@ pub fn definition_pass(
                 Op1::Call => {
                     let mb_type = stack_type.pop();
                     match mb_type {
-                        Some(t) => handle_call(pos, &t, &mut stack_type, &mut compile_time_stack)?,
+                        Some(t) => handle_call(pos, &t, &mut rgn_vars, &mut stack_type, &mut compile_time_stack)?,
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     }
                     verified_ops.push(Op2::Call)
@@ -490,6 +496,7 @@ pub fn definition_pass(
                         unique: true,
                         id: id,
                     };
+                    rgn_vars.push(r.clone());
                     stack_type.push(Type::Handle(r.clone()));
                     compile_time_stack.push(CTStackVal::Region(r));
                     verified_ops.push(Op2::NewRgn);
@@ -537,6 +544,7 @@ pub fn definition_pass(
 fn handle_call(
     pos: u32,
     t: &Type,
+    rgn_vars: &mut Vec<Region>,
     stack_type: &mut Vec<Type>,
     compile_time_stack: &mut Vec<CTStackVal>,
 ) -> Result<(), Error> {
@@ -577,7 +585,7 @@ fn handle_call(
                         return Err(Error::SizeError(pos, Op1::Call, *size, t.size()));
                     }
                     let new_t = substitute_t(&*body, &HashMap::from([(*var, t)]), &HashMap::new());
-                    handle_call(pos, &new_t, stack_type, compile_time_stack)
+                    handle_call(pos, &new_t, rgn_vars, stack_type, compile_time_stack)
                 }
                 Some(ctval) => return Err(Error::KindError(pos, Op1::Call, Kind::Type, ctval)),
                 None => return Err(Error::TypeErrorEmptyCTStack(pos, Op1::Call)),
@@ -587,9 +595,15 @@ fn handle_call(
             let mb_r = compile_time_stack.pop();
             match mb_r {
                 Some(CTStackVal::Region(r)) => {
+                    if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                        return Err(Error::RegionAccessError(pos, Op1::Call, r));
+                    }
                     let new_t =
                         substitute_t(&*body, &HashMap::new(), &HashMap::from([(var.id, r)]));
-                    handle_call(pos, &new_t, stack_type, compile_time_stack)
+                    if r.unique {
+                        rgn_vars.retain(|r2| r2.id != r.id);
+                    }
+                    handle_call(pos, &new_t, rgn_vars, stack_type, compile_time_stack)
                 }
                 Some(ctval) => return Err(Error::KindError(pos, Op1::Call, Kind::Region, ctval)),
                 None => return Err(Error::TypeErrorEmptyCTStack(pos, Op1::Call)),
