@@ -6,7 +6,6 @@
 
 use crate::header::*;
 use std::collections::HashMap;
-use std::collections::VecDeque;
 
 pub fn go(
     types_instrs: Vec<ForwardDec>,
@@ -99,10 +98,9 @@ pub fn definition_pass(
     let Some(my_type) = types.get(label).cloned() else {
         panic!("Type not found for label {}", label);
     };
-    let (compile_time_stack_vecdeque, mut stack_type) = setup_verifier(&my_type)?;
-
     // The stacks used for this pass algorithm.
-    let mut compile_time_stack: Vec<CTStackVal> = compile_time_stack_vecdeque.into();
+    let (mut compile_time_stack, mut stack_type) = setup_verifier(&my_type)?;
+    compile_time_stack.reverse();
     let mut quantification_stack: Vec<Quantification> = vec![];
 
     // The verified bytecode produced by this first pass.
@@ -160,23 +158,23 @@ pub fn definition_pass(
                     &mut quantification_stack,
                 )?,
                 Op1::App => match compile_time_stack.pop() {
-                    Some(CTStackVal::Type(t_arg)) => match stack_type.pop_back() {
+                    Some(CTStackVal::Type(t_arg)) => match stack_type.pop() {
                         Some(Type::Forall(id, s, t)) => {
                             if s != t_arg.size() {
                                 return Err(Error::SizeError(pos, *op, s, t_arg.size()));
                             }
                             let new_t =
                                 substitute_t(&*t, &HashMap::from([(id, t_arg)]), &HashMap::new());
-                            stack_type.push_back(new_t);
+                            stack_type.push(new_t);
                         }
                         Some(t) => return Err(Error::TypeErrorForallExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
                     },
-                    Some(CTStackVal::Region(r_arg)) => match stack_type.pop_back() {
+                    Some(CTStackVal::Region(r_arg)) => match stack_type.pop() {
                         Some(Type::ForallRegion(r, t)) => {
                             let new_t =
                                 substitute_t(&*t, &HashMap::new(), &HashMap::from([(r.id, r_arg)]));
-                            stack_type.push_back(new_t);
+                            stack_type.push(new_t);
                         }
                         Some(t) => return Err(Error::TypeErrorForallRegionExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
@@ -212,17 +210,17 @@ pub fn definition_pass(
                     }
                     let t = stack_type.get(stack_len - 1 - i2).unwrap().clone();
                     let size = t.size();
-                    stack_type.push_back(t);
+                    stack_type.push(t);
                     verified_ops.push(Op2::Get(offset, size));
                 }
                 Op1::Init(i) => {
-                    let mb_val = stack_type.pop_back();
-                    let mb_tpl = stack_type.pop_back();
+                    let mb_val = stack_type.pop();
+                    let mb_tpl = stack_type.pop();
                     let f = |component_types: Vec<(bool, Type)>,
                              g: &dyn Fn(
                         &Type,
                         Vec<(bool, Type)>,
-                        &mut VecDeque<Type>,
+                        &mut Vec<Type>,
                         &mut Vec<Op2>,
                     ) -> ()| {
                         match component_types.get(usize::from(*i)) {
@@ -261,7 +259,7 @@ pub fn definition_pass(
                             component_types,
                             &|actual: &Type,
                               mut component_types: Vec<(bool, Type)>,
-                              stack_type: &mut VecDeque<Type>,
+                              stack_type: &mut Vec<Type>,
                               verified_ops: &mut Vec<Op2>| {
                                 let mut offset = 0;
                                 let tpl_size = component_types.iter().map(|(_, t)| t.size()).sum();
@@ -270,7 +268,7 @@ pub fn definition_pass(
                                     offset += t.size();
                                 }
                                 component_types[*i as usize] = (true, actual.clone());
-                                stack_type.push_back(Type::Tuple(component_types));
+                                stack_type.push(Type::Tuple(component_types));
                                 verified_ops.push(Op2::Init(offset, actual.size(), tpl_size));
                             },
                         )?,
@@ -279,14 +277,14 @@ pub fn definition_pass(
                                 if rgn_vars.iter().all(|r2| r.id != r2.id) {
                                     return Err(Error::RegionAccessError(pos, *op, r));
                                 }
-                                f(component_types, &|actual: &Type, mut component_types: Vec<(bool, Type)>, stack_type: &mut VecDeque<Type>, verified_ops: &mut Vec<Op2>| {
+                                f(component_types, &|actual: &Type, mut component_types: Vec<(bool, Type)>, stack_type: &mut Vec<Type>, verified_ops: &mut Vec<Op2>| {
                                     let mut offset = 0;
                                     for i2 in 0..*i {
                                         let (_, t) = &component_types[i2 as usize];
                                         offset += t.size();
                                     }
                                     component_types[*i as usize] = (true, actual.clone());
-                                    stack_type.push_back(Type::Ptr(Box::new(Type::Tuple(component_types)), r));
+                                    stack_type.push(Type::Ptr(Box::new(Type::Tuple(component_types)), r));
                                     verified_ops
                                         .push(Op2::InitIP(offset, actual.size()));
                                 })?
@@ -301,7 +299,7 @@ pub fn definition_pass(
                     let mb_type = compile_time_stack.pop();
                     match mb_type {
                         Some(CTStackVal::Type(Type::Ptr(t, r))) => {
-                            match stack_type.pop_back() {
+                            match stack_type.pop() {
                                 Some(Type::Handle(r2)) => {
                                     // check that t is in r and that r is in the list of declared regions
                                     if r.id != r2.id {
@@ -317,7 +315,7 @@ pub fn definition_pass(
                                         for (_, t) in component_types {
                                             ts.push((false, t));
                                         }
-                                        stack_type.push_back(Type::Ptr(Box::new(Type::Tuple(ts)), r));
+                                        stack_type.push(Type::Ptr(Box::new(Type::Tuple(ts)), r));
                                         verified_ops.push(Op2::Malloc(size));
                                     } else {
                                         return Err(Error::TypeErrorMallocNonTuple(pos, *op, t));
@@ -336,7 +334,7 @@ pub fn definition_pass(
                             }
                             let t = Type::Tuple(ts);
                             let size = t.size();
-                            stack_type.push_back(t);
+                            stack_type.push(t);
                             verified_ops.push(Op2::Alloca(size));
                         }
                         Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
@@ -344,12 +342,12 @@ pub fn definition_pass(
                     };
                 }
                 Op1::Proj(i) => {
-                    let mb_tpl = stack_type.pop_back();
+                    let mb_tpl = stack_type.pop();
                     let mut f = |component_types: Vec<(bool, Type)>,
                                  g: &dyn Fn(
                         &Type,
                         usize,
-                        &mut VecDeque<Type>,
+                        &mut Vec<Type>,
                         &mut Vec<Op2>,
                         Vec<(bool, Type)>,
                     ) -> ()| {
@@ -373,13 +371,13 @@ pub fn definition_pass(
                     match mb_tpl {
                         Some(tpl) => match tpl {
                             Type::Tuple(component_types) => {
-                                f(component_types, &|t: &Type, s: usize, stack_type: &mut VecDeque<Type>, verified_ops: &mut Vec<Op2>, component_types: Vec<(bool, Type)>| {
+                                f(component_types, &|t: &Type, s: usize, stack_type: &mut Vec<Type>, verified_ops: &mut Vec<Op2>, component_types: Vec<(bool, Type)>| {
                                     let mut offset = 0;
                                     for i2 in 0..*i {
                                         let (_, t) = &component_types[i2 as usize];
                                         offset += t.size();
                                     }
-                                    stack_type.push_back(t.clone());
+                                    stack_type.push(t.clone());
                                     verified_ops.push(Op2::Proj(offset, t.size(), s));
                                 })?;
                             }
@@ -389,13 +387,13 @@ pub fn definition_pass(
                                 }
                                 match *boxed_t {
                                     Type::Tuple(component_types) => {
-                                        f(component_types, &|t: &Type, _s: usize, stack_type: &mut VecDeque<Type>, verified_ops: &mut Vec<Op2>, component_types: Vec<(bool, Type)>| {
+                                        f(component_types, &|t: &Type, _s: usize, stack_type: &mut Vec<Type>, verified_ops: &mut Vec<Op2>, component_types: Vec<(bool, Type)>| {
                                             let mut offset = 0;
                                             for i2 in 0..*i {
                                                 let (_, t) = &component_types[i2 as usize];
                                                 offset += t.size();
                                             }
-                                            stack_type.push_back(t.clone());
+                                            stack_type.push(t.clone());
                                             verified_ops.push(Op2::ProjIP(offset, t.size()));
                                         })?;
                                     }
@@ -408,35 +406,35 @@ pub fn definition_pass(
                     }
                 }
                 Op1::Call => {
-                    let mb_type = stack_type.pop_back();
+                    let mb_type = stack_type.pop();
                     match mb_type {
                         Some(t) => handle_call(pos, &t, &mut stack_type, &mut compile_time_stack)?,
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     }
                     verified_ops.push(Op2::Call)
                 }
-                Op1::Print => match stack_type.pop_back() {
+                Op1::Print => match stack_type.pop() {
                     Some(Type::I32) => verified_ops.push(Op2::Print),
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
                 Op1::Lit(lit) => {
-                    stack_type.push_back(Type::I32);
+                    stack_type.push(Type::I32);
                     verified_ops.push(Op2::Lit(*lit))
                 }
                 Op1::GlobalFunc(label) => {
                     let t = types
                         .get(label)
                         .ok_or_else(|| panic!("this should be an Err"))?;
-                    stack_type.push_back(t.clone());
+                    stack_type.push(t.clone());
                     verified_ops.push(Op2::GlobalFunc(*label))
                 }
-                Op1::Halt => match stack_type.pop_back() {
+                Op1::Halt => match stack_type.pop() {
                     Some(Type::I32) => verified_ops.push(Op2::Halt),
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
-                Op1::Pack => match stack_type.pop_back() {
+                Op1::Pack => match stack_type.pop() {
                     Some(type_of_hidden) => match compile_time_stack.pop() {
                         Some(CTStackVal::Type(hidden_type)) => match compile_time_stack.pop() {
                             Some(CTStackVal::Type(Type::Exists(
@@ -465,7 +463,7 @@ pub fn definition_pass(
                                         type_of_hidden.size(),
                                     ));
                                 }
-                                stack_type.push_back(Type::Exists(
+                                stack_type.push(Type::Exists(
                                     id,
                                     size_of_hidden,
                                     existential_type,
@@ -492,12 +490,12 @@ pub fn definition_pass(
                         unique: true,
                         id: id,
                     };
-                    stack_type.push_back(Type::Handle(r.clone()));
+                    stack_type.push(Type::Handle(r.clone()));
                     compile_time_stack.push(CTStackVal::Region(r));
                     verified_ops.push(Op2::NewRgn);
                 }
                 Op1::FreeRgn => {
-                    match stack_type.pop_back() {
+                    match stack_type.pop() {
                         Some(Type::Handle(r)) => {
                             match rgn_vars.iter().find(|r2| r.id == r2.id) {
                                 Some(r2) if r2.unique => {
@@ -513,13 +511,13 @@ pub fn definition_pass(
                     }
                 }
                 Op1::Ptr => handle_ptr(pos, op, &mut compile_time_stack)?,
-                Op1::Deref => match stack_type.pop_back() {
+                Op1::Deref => match stack_type.pop() {
                     Some(Type::Ptr(t, r)) => {
                         if rgn_vars.iter().all(|r2| r.id != r2.id) {
                             return Err(Error::RegionAccessError(pos, *op, r));
                         }
                         let s = t.size();
-                        stack_type.push_back(*t);
+                        stack_type.push(*t);
                         verified_ops.push(Op2::Deref(s));
                     }
                     Some(t) => return Err(Error::TypeErrorPtrExpected(pos, *op, t)),
@@ -539,7 +537,7 @@ pub fn definition_pass(
 fn handle_call(
     pos: u32,
     t: &Type,
-    stack_type: &mut VecDeque<Type>,
+    stack_type: &mut Vec<Type>,
     compile_time_stack: &mut Vec<CTStackVal>,
 ) -> Result<(), Error> {
     match t {
@@ -547,7 +545,7 @@ fn handle_call(
             let arg_ts_needed = args;
             let mut arg_ts_present = vec![];
             for _ in 0..arg_ts_needed.len() {
-                match stack_type.pop_back() {
+                match stack_type.pop() {
                     Some(t) => arg_ts_present.push(t.clone()),
                     None => {
                         return Err(Error::TypeErrorNotEnoughRuntimeArgs(
@@ -870,22 +868,22 @@ pub fn type_eq(type1: &Type, type2: &Type) -> bool {
     }
 }
 
-fn setup_verifier(t: &Type) -> Result<(VecDeque<CTStackVal>, VecDeque<Type>), Error> {
+fn setup_verifier(t: &Type) -> Result<(Vec<CTStackVal>, Vec<Type>), Error> {
     match t {
         Type::Forall(id, s, t) => {
             let (mut ct_stack, param_types) = setup_verifier(t)?;
-            ct_stack.push_front(CTStackVal::Type(Type::Var(*id, *s)));
+            ct_stack.push(CTStackVal::Type(Type::Var(*id, *s)));
             Ok((ct_stack, param_types))
         }
         Type::ForallRegion(r, t) => {
             let (mut ct_stack, param_types) = setup_verifier(t)?;
-            ct_stack.push_front(CTStackVal::Region(*r));
+            ct_stack.push(CTStackVal::Region(*r));
             Ok((ct_stack, param_types))
         }
         Type::Func(param_ts) => {
             let mut param_ts = param_ts.to_vec();
             param_ts.reverse();
-            Ok((VecDeque::new(), param_ts.into()))
+            Ok((vec![], param_ts.into()))
         }
         _ => panic!("this should be an Err"),
     }
