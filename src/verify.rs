@@ -887,7 +887,10 @@ pub fn type_eq(type1: &Type, type2: &Type) -> bool {
             let body2_subbed = substitute_t(&body2, &sub, &HashMap::new());
             size1 == size2 && type_eq(body1, &body2_subbed)
         }
-        (Type::ForallRegion(r1, body1, _captured_rgns1), Type::ForallRegion(r2, body2, _captured_rgns2)) => {
+        (
+            Type::ForallRegion(r1, body1, _captured_rgns1),
+            Type::ForallRegion(r2, body2, _captured_rgns2),
+        ) => {
             let mut sub = HashMap::new();
             sub.insert(r2.id, *r1);
             let body2_subbed = substitute_t(&body2, &HashMap::new(), &sub);
