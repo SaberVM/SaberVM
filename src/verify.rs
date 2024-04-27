@@ -486,7 +486,7 @@ pub fn definition_pass(
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
                 Op1::Size(s) => compile_time_stack.push(CTStackVal::Size((*s).try_into().unwrap())),
-                Op1::NewRgn => {
+                Op1::NewRgn(size) => {
                     let id = Id(*label, fresh_id);
                     fresh_id += 1;
                     let r = Region {
@@ -496,7 +496,7 @@ pub fn definition_pass(
                     rgn_vars.push(r.clone());
                     stack_type.push(Type::Handle(r.clone()));
                     compile_time_stack.push(CTStackVal::Region(r));
-                    verified_ops.push(Op2::NewRgn);
+                    verified_ops.push(Op2::NewRgn((*size).try_into().unwrap()));
                 }
                 Op1::FreeRgn => match stack_type.pop() {
                     Some(Type::Handle(r)) => match rgn_vars.iter().find(|r2| r.id == r2.id) {

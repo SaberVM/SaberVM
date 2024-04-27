@@ -43,7 +43,7 @@ pub enum Op1 {
     Halt,
     Pack,
     Size(u32),
-    NewRgn,
+    NewRgn(u32),
     FreeRgn,
     Ptr,
     Deref,
@@ -65,7 +65,7 @@ pub enum Op2 {
     Lit(i32),
     GlobalFunc(Label),
     Halt,
-    NewRgn,
+    NewRgn(usize),
     FreeRgn,
     Deref(usize),
 }

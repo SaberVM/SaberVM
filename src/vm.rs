@@ -86,7 +86,7 @@ fn op_to_bytes(op: &Op2) -> Vec<u8> {
         Op2::Lit(lit) => [vec![9], lit.to_le_bytes().to_vec()].concat(),
         Op2::GlobalFunc(label) => [vec![10], label.to_le_bytes().to_vec()].concat(),
         Op2::Halt => vec![11],
-        Op2::NewRgn => vec![12],
+        Op2::NewRgn(size) => [vec![12], size.to_le_bytes().to_vec()].concat(),
         Op2::FreeRgn => vec![13],
         Op2::Deref(size) => [vec![14], size.to_le_bytes().to_vec()].concat(),
     }

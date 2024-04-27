@@ -17,10 +17,10 @@
 
 #define METADATA_OFFSET (sizeof(u64) + sizeof(u64))
 
-Region *new_region() {
-    Region *r = malloc(sizeof(Region));
+Region *new_region(size_t size) {
+    Region *r = malloc(sizeof(size_t) + sizeof(size_t) + sizeof(size_t) + size); // an extra sizeof(size_t) to be safe re: padding
     r->offset = 0;
-    r->next = NULL;
+    r->capacity = size;
     return r;
 }
 
@@ -43,13 +43,9 @@ Pointer alloc_object(Region *r, u64 size) {
         }
         offset += METADATA_OFFSET + r->data[offset];
     }
-    if (r->offset + METADATA_OFFSET + size > 4096) {
-        if (r->next == NULL) {
-            r->next = new_region();
-        }
-        return alloc_object(r->next, size);
-    }
-    else {
+    if (r->offset + METADATA_OFFSET + size > r->capacity) {
+        exit(1); // this will jump to an exception handler eventually
+    } else {
         i64 first_generation = 1;
         memcpy(r->data + r->offset, &first_generation, sizeof(first_generation));
         memcpy(r->data + r->offset + sizeof(first_generation), &size, sizeof(size));
@@ -86,13 +82,6 @@ void free_object(Pointer ptr) {
     memcpy(&g, ptr.reference - METADATA_OFFSET, sizeof(g));
     g = -g;
     memcpy(ptr.reference - METADATA_OFFSET, &g, sizeof(g));
-}
-
-void free_region(Region *r) {
-    if (r->next != NULL) {
-        free_region(r->next);
-    }
-    free(r);
 }
 
 #define INSTR_PARAM(t, name) \
@@ -230,7 +219,8 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 12: {
             dbg("new region!\n");
             pc++;
-            Region *r = new_region();
+            INSTR_PARAM(size_t, size);
+            Region *r = new_region(size);
             PUSH(Region*, r);
             break;
         }
@@ -238,7 +228,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             dbg("free region!\n");
             pc++;
             POP(Region*, r);
-            free_region(r);
+            free(r);
             break;
         }
         case 14: {

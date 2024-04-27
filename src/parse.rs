@@ -128,7 +128,24 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
                         },
                     },
                 },
-                0x18 => Op1::NewRgn,
+                0x18 => match bytes_iter.next() {
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n1) => match bytes_iter.next() {
+                        None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                        Some(n2) => match bytes_iter.next() {
+                            None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                            Some(n3) => match bytes_iter.next() {
+                                None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                                Some(n4) => Op1::NewRgn(
+                                    (*n4 as u32) << 24
+                                        | (*n3 as u32) << 16
+                                        | (*n2 as u32) << 8
+                                        | (*n1 as u32),
+                                ),
+                            },
+                        },
+                    },
+                },
                 0x19 => Op1::FreeRgn,
                 0x1A => Op1::Ptr,
                 0x1B => Op1::Deref,
