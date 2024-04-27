@@ -103,7 +103,7 @@ pub enum Type {
     Var(Id, usize),
     Func(Vec<Type>),
     Forall(Id, usize, Box<Type>),
-    ForallRegion(Region, Box<Type>),
+    ForallRegion(Region, Box<Type>, Vec<Region>),
     Exists(Id, usize, Box<Type>),
 }
 
@@ -117,7 +117,7 @@ impl Type {
             Self::Var(_id, s) => *s,
             Self::Func(_param_ts) => 4,
             Self::Forall(_id, _size, t) => t.size(),
-            Self::ForallRegion(_r, t) => t.size(),
+            Self::ForallRegion(_r, t, _captured_rgns) => t.size(),
             Self::Exists(_id, _size, t) => t.size(),
         }
     }

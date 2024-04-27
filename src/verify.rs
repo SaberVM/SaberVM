@@ -171,16 +171,13 @@ pub fn definition_pass(
                         None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
                     },
                     Some(CTStackVal::Region(r_arg)) => match stack_type.pop() {
-                        Some(Type::ForallRegion(r, t)) => {
-                            if rgn_vars.iter().all(|r2| r_arg.id != r2.id) {
+                        Some(Type::ForallRegion(r, t, captured_rgns)) => {
+                            if r.unique && captured_rgns.iter().any(|r2| r_arg.id == r2.id) {
                                 return Err(Error::RegionAccessError(pos, *op, r_arg));
                             }
                             let new_t =
                                 substitute_t(&*t, &HashMap::new(), &HashMap::from([(r.id, r_arg)]));
                             stack_type.push(new_t);
-                            if r_arg.unique {
-                                rgn_vars.retain(|r2| r2.id != r_arg.id);
-                            }
                         }
                         Some(t) => return Err(Error::TypeErrorForallRegionExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
@@ -255,8 +252,10 @@ pub fn definition_pass(
                                         ));
                                     }
                                 }
+                            },
+                            Some((true, _t)) => {
+                                return Err(Error::TypeErrorDoubleInit(pos, *op, *i))
                             }
-                            Some((true, _t)) => return Err(Error::TypeErrorDoubleInit(pos, *op, *i))
                         }
                         Ok(())
                     };
@@ -370,7 +369,9 @@ pub fn definition_pass(
                             Some((true, t)) => {
                                 g(&t, s, &mut stack_type, &mut verified_ops, component_types)
                             }
-                            Some((false, _)) => return Err(Error::TypeErrorUninitializedRead(pos, *op, *i))
+                            Some((false, _)) => {
+                                return Err(Error::TypeErrorUninitializedRead(pos, *op, *i))
+                            }
                         }
                         Ok(())
                     };
@@ -414,7 +415,7 @@ pub fn definition_pass(
                 Op1::Call => {
                     let mb_type = stack_type.pop();
                     match mb_type {
-                        Some(t) => handle_call(pos, &t, &mut rgn_vars, &mut stack_type, &mut compile_time_stack)?,
+                        Some(t) => handle_call(pos, &t, &mut stack_type, &mut compile_time_stack)?,
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     }
                     verified_ops.push(Op2::Call)
@@ -469,11 +470,7 @@ pub fn definition_pass(
                                         type_of_hidden.size(),
                                     ));
                                 }
-                                stack_type.push(Type::Exists(
-                                    id,
-                                    size_of_hidden,
-                                    existential_type,
-                                ));
+                                stack_type.push(Type::Exists(id, size_of_hidden, existential_type));
                             }
                             Some(CTStackVal::Type(t)) => {
                                 return Err(Error::TypeErrorExistentialExpected(pos, *op, t))
@@ -501,22 +498,18 @@ pub fn definition_pass(
                     compile_time_stack.push(CTStackVal::Region(r));
                     verified_ops.push(Op2::NewRgn);
                 }
-                Op1::FreeRgn => {
-                    match stack_type.pop() {
-                        Some(Type::Handle(r)) => {
-                            match rgn_vars.iter().find(|r2| r.id == r2.id) {
-                                Some(r2) if r2.unique => {
-                                    rgn_vars.retain(|r2| r2.id != r.id);
-                                    verified_ops.push(Op2::FreeRgn)
-                                }
-                                Some(_r2) => return Err(Error::UniquenessError(pos, *op, r)),
-                                None => return Err(Error::RegionAccessError(pos, *op, r)),
-                            }
+                Op1::FreeRgn => match stack_type.pop() {
+                    Some(Type::Handle(r)) => match rgn_vars.iter().find(|r2| r.id == r2.id) {
+                        Some(r2) if r2.unique => {
+                            rgn_vars.retain(|r2| r2.id != r.id);
+                            verified_ops.push(Op2::FreeRgn)
                         }
-                        Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
-                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    }
-                }
+                        Some(_r2) => return Err(Error::UniquenessError(pos, *op, r)),
+                        None => return Err(Error::RegionAccessError(pos, *op, r)),
+                    },
+                    Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
+                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                },
                 Op1::Ptr => handle_ptr(pos, op, &mut compile_time_stack)?,
                 Op1::Deref => match stack_type.pop() {
                     Some(Type::Ptr(t, r)) => {
@@ -544,7 +537,6 @@ pub fn definition_pass(
 fn handle_call(
     pos: u32,
     t: &Type,
-    rgn_vars: &mut Vec<Region>,
     stack_type: &mut Vec<Type>,
     compile_time_stack: &mut Vec<CTStackVal>,
 ) -> Result<(), Error> {
@@ -585,25 +577,22 @@ fn handle_call(
                         return Err(Error::SizeError(pos, Op1::Call, *size, t.size()));
                     }
                     let new_t = substitute_t(&*body, &HashMap::from([(*var, t)]), &HashMap::new());
-                    handle_call(pos, &new_t, rgn_vars, stack_type, compile_time_stack)
+                    handle_call(pos, &new_t, stack_type, compile_time_stack)
                 }
                 Some(ctval) => return Err(Error::KindError(pos, Op1::Call, Kind::Type, ctval)),
                 None => return Err(Error::TypeErrorEmptyCTStack(pos, Op1::Call)),
             }
         }
-        Type::ForallRegion(var, body) => {
+        Type::ForallRegion(var, body, captured_rgns) => {
             let mb_r = compile_time_stack.pop();
             match mb_r {
                 Some(CTStackVal::Region(r)) => {
-                    if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                    if var.unique && captured_rgns.iter().any(|r2| r2.id == r.id) {
                         return Err(Error::RegionAccessError(pos, Op1::Call, r));
                     }
                     let new_t =
                         substitute_t(&*body, &HashMap::new(), &HashMap::from([(var.id, r)]));
-                    if r.unique {
-                        rgn_vars.retain(|r2| r2.id != r.id);
-                    }
-                    handle_call(pos, &new_t, rgn_vars, stack_type, compile_time_stack)
+                    handle_call(pos, &new_t, stack_type, compile_time_stack)
                 }
                 Some(ctval) => return Err(Error::KindError(pos, Op1::Call, Kind::Region, ctval)),
                 None => return Err(Error::TypeErrorEmptyCTStack(pos, Op1::Call)),
@@ -752,7 +741,11 @@ fn handle_end(
         Some(Quantification::Region(r)) => match compile_time_stack.pop() {
             Some(CTStackVal::Type(t)) => match compile_time_stack.pop() {
                 Some(CTStackVal::Region(r2)) if r.id == r2.id => {
-                    compile_time_stack.push(CTStackVal::Type(Type::ForallRegion(r, Box::new(t))));
+                    compile_time_stack.push(CTStackVal::Type(Type::ForallRegion(
+                        r,
+                        Box::new(t),
+                        vec![],
+                    )));
                     Ok(())
                 }
                 Some(CTStackVal::Region(r2)) => return Err(Error::RegionError(pos, *op, r, r2)),
@@ -821,7 +814,11 @@ pub fn substitute_t(typ: &Type, tsubs: &HashMap<Id, Type>, rsubs: &HashMap<Id, R
     match typ {
         Type::I32 => Type::I32,
         Type::Handle(r) => Type::Handle(substitute_r(r, rsubs)),
-        Type::Tuple(ts) => Type::Tuple(ts.iter().map(|(init, t)| (*init, substitute_t(t, tsubs, rsubs))).collect()),
+        Type::Tuple(ts) => Type::Tuple(
+            ts.iter()
+                .map(|(init, t)| (*init, substitute_t(t, tsubs, rsubs)))
+                .collect(),
+        ),
         Type::Ptr(t, r) => Type::Ptr(
             Box::new(substitute_t(t, tsubs, rsubs)),
             substitute_r(r, rsubs),
@@ -835,8 +832,14 @@ pub fn substitute_t(typ: &Type, tsubs: &HashMap<Id, Type>, rsubs: &HashMap<Id, R
         }
         Type::Exists(id, s, t) => Type::Exists(*id, *s, Box::new(substitute_t(t, tsubs, rsubs))),
         Type::Forall(id, s, t) => Type::Forall(*id, *s, Box::new(substitute_t(t, tsubs, rsubs))),
-        Type::ForallRegion(id, t) => {
-            Type::ForallRegion(*id, Box::new(substitute_t(t, tsubs, rsubs)))
+        Type::ForallRegion(id, t, captured_rgns) => {
+            let mut captured_rgns = captured_rgns.clone();
+            for (_, r) in rsubs {
+                if r.unique {
+                    captured_rgns.push(*r);
+                }
+            }
+            Type::ForallRegion(*id, Box::new(substitute_t(t, tsubs, rsubs)), captured_rgns)
         }
     }
 }
@@ -878,6 +881,18 @@ pub fn type_eq(type1: &Type, type2: &Type) -> bool {
             let t2_subbed = substitute_t(t2, &sub, &HashMap::new());
             repr1 == repr2 && type_eq(t1, &t2_subbed)
         }
+        (Type::Forall(id1, size1, body1), Type::Forall(id2, size2, body2)) => {
+            let mut sub = HashMap::new();
+            sub.insert(*id2, Type::Var(*id1, size1.clone()));
+            let body2_subbed = substitute_t(&body2, &sub, &HashMap::new());
+            size1 == size2 && type_eq(body1, &body2_subbed)
+        }
+        (Type::ForallRegion(r1, body1, _captured_rgns1), Type::ForallRegion(r2, body2, _captured_rgns2)) => {
+            let mut sub = HashMap::new();
+            sub.insert(r2.id, *r1);
+            let body2_subbed = substitute_t(&body2, &HashMap::new(), &sub);
+            type_eq(body1, &body2_subbed)
+        }
         (_, _) => false,
     }
 }
@@ -889,7 +904,7 @@ fn setup_verifier(t: &Type) -> Result<(Vec<CTStackVal>, Vec<Type>), Error> {
             ct_stack.push(CTStackVal::Type(Type::Var(*id, *s)));
             Ok((ct_stack, param_types))
         }
-        Type::ForallRegion(r, t) => {
+        Type::ForallRegion(r, t, _captured_rgns) => {
             let (mut ct_stack, param_types) = setup_verifier(t)?;
             ct_stack.push(CTStackVal::Region(*r));
             Ok((ct_stack, param_types))
