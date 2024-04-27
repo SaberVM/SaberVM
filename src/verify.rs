@@ -339,6 +339,9 @@ pub fn definition_pass(
                             }
                             let t = Type::Tuple(ts);
                             let size = t.size();
+                            if size > 4096 {
+                                return Err(Error::TooBigForStack(pos, *op, t));
+                            }
                             stack_type.push(t);
                             verified_ops.push(Op2::Alloca(size));
                         }
@@ -516,9 +519,12 @@ pub fn definition_pass(
                         if rgn_vars.iter().all(|r2| r.id != r2.id) {
                             return Err(Error::RegionAccessError(pos, *op, r));
                         }
-                        let s = t.size();
+                        let size = t.size();
+                        if size > 4096 {
+                            return Err(Error::TooBigForStack(pos, *op, *t));
+                        }
                         stack_type.push(*t);
-                        verified_ops.push(Op2::Deref(s));
+                        verified_ops.push(Op2::Deref(size));
                     }
                     Some(t) => return Err(Error::TypeErrorPtrExpected(pos, *op, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),

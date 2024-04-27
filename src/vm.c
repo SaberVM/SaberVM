@@ -91,13 +91,28 @@ void free_object(Pointer ptr) {
 
 #define POP(t, name) \
     t name; \
+    if (sp == 0 && stack->last != NULL) { stack = stack->last; sp = stack->saved_sp; } \
     sp -= sizeof(name); \
-    memcpy(&name, stack + sp, sizeof(name));
+    memcpy(&name, stack->data + sp, sizeof(name));
 
+// push a value onto the stack.
+// no `ensure_size` here because the caller will often know that it's not necessary.
 #define PUSH(t, e) \
-        {t x = e; \
-        memcpy(stack + sp, &x, sizeof(x)); \
-        sp += sizeof(x);}
+    {t x = e; \
+    memcpy(stack->data + sp, &x, sizeof(x)); \
+    sp += sizeof(x);}
+
+// start a new contiguous stack chunk if the given size wouldn't fit.
+// The caller must guarantee that the given size is less than STACK_CHUNK_SIZE
+void ensure_size(Stack *stack, u32 *sp, size_t size) {
+    if (*sp + size > STACK_CHUNK_SIZE) {
+        Stack *new_stack = malloc(sizeof(Stack));
+        new_stack->last = stack;
+        new_stack->saved_sp = *sp;
+        *sp = 0;
+        stack = new_stack;
+    }
+}
 
 uint8_t vm_function(u8 instrs[], size_t instrs_len) {
     for (u32 i = 0; i < instrs_len; i++) {
@@ -105,12 +120,12 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
     }
     dbg("\n");
     u32 pc = 0;
-    u8 sp = 0;
-    Stack stack;
+    u32 sp = 0;
+    Stack *stack = malloc(sizeof(Stack));
     while (1) {
         dbg("pc: %d, sp: %d\n", pc, sp);
         for (u32 i = 0; i < sp; i++) {
-            dbg(" %d", stack[i]);
+            dbg(" %d", stack->data[i]);
         }
         dbg("\n");
         switch (instrs[pc]) {
@@ -119,7 +134,8 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             pc++;
             INSTR_PARAM(size_t, offset);
             INSTR_PARAM(size_t, size);
-            memcpy(stack + sp, stack + sp - offset - size, size);
+            ensure_size(stack, &sp, size);
+            memcpy(stack->data + sp, stack->data + sp - offset - size, size);
             sp += size;
             break;
         }
@@ -130,7 +146,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             INSTR_PARAM(size_t, size);
             INSTR_PARAM(size_t, tpl_size);
             sp -= size;
-            memcpy(stack + sp - tpl_size + offset, stack + sp, size);
+            memcpy(stack->data + sp - tpl_size + offset, stack->data + sp, size);
             break;
         }
         case 2: {
@@ -140,9 +156,9 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             INSTR_PARAM(size_t, size);
             Pointer ptr; 
             sp -= size + sizeof(ptr);
-            memcpy(&ptr, stack + sp, sizeof(ptr));
+            memcpy(&ptr, stack->data + sp, sizeof(ptr));
             check_ptr(ptr);
-            memcpy(ptr.reference + offset, stack + sp + sizeof(ptr), size);
+            memcpy(ptr.reference + offset, stack->data + sp + sizeof(ptr), size);
             PUSH(Pointer, ptr);
             break;
         }
@@ -151,6 +167,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             pc++;
             INSTR_PARAM(size_t, size);
             POP(Region*, handle);
+            ensure_size(stack, &sp, sizeof(handle));
             PUSH(Pointer, alloc_object(handle, size));
             break;
         }
@@ -158,6 +175,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             dbg("alloca!\n");
             pc++;
             INSTR_PARAM(size_t, size);
+            ensure_size(stack, &sp, size);
             sp += size;
             break;
         }
@@ -168,7 +186,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             INSTR_PARAM(size_t, size);
             INSTR_PARAM(size_t, tpl_size);
             sp -= tpl_size;
-            memcpy(stack + sp, stack + sp + offset, size);
+            memcpy(stack->data + sp, stack->data + sp + offset, size);
             sp += size;
             break;
         }
@@ -179,7 +197,8 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             INSTR_PARAM(size_t, size);
             POP(Pointer, ptr);
             check_ptr(ptr);
-            memcpy(stack + sp, ptr.reference + offset, size);
+            ensure_size(stack, &sp, size);
+            memcpy(stack->data + sp, ptr.reference + offset, size);
             sp += size;
             break;
         }
@@ -200,6 +219,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             dbg("literal!\n");
             pc++;
             INSTR_PARAM(i32, lit);
+            ensure_size(stack, &sp, sizeof(lit));
             PUSH(i32, lit);
             break;
         }
@@ -207,6 +227,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             dbg("global function!\n");
             pc++;
             INSTR_PARAM(u32, lit);
+            ensure_size(stack, &sp, sizeof(lit));
             PUSH(u32, lit);
             break;
         }
@@ -221,6 +242,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             pc++;
             INSTR_PARAM(size_t, size);
             Region *r = new_region(size);
+            ensure_size(stack, &sp, sizeof(r));
             PUSH(Region*, r);
             break;
         }
@@ -237,7 +259,8 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             INSTR_PARAM(size_t, size);
             POP(Pointer, ptr);
             check_ptr(ptr);
-            memcpy(stack + sp, ptr.reference, size);
+            ensure_size(stack, &sp, size);
+            memcpy(stack->data + sp, ptr.reference, size);
             sp += size;
             break;
         }

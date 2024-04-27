@@ -191,4 +191,5 @@ pub enum Error {
     KindErrorBadApp(Pos, Op1, CTStackVal),
     TypeErrorDoubleInit(Pos, Op1, u8),
     TypeErrorUninitializedRead(Pos, Op1, u8),
+    TooBigForStack(Pos, Op1, Type),
 }

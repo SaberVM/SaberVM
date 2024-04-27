@@ -18,6 +18,11 @@ typedef uint8_t u8;
 typedef int32_t i32;
 
 /*
+ * The size of each contiguous chunk of the stack.
+ */
+#define STACK_CHUNK_SIZE 4096
+
+/*
  * A pointer to an object within a region.
  * The `generation` field is used to detect when a pointer becomes invalid.
  * The `reference` field is the actual pointer.
@@ -38,7 +43,11 @@ typedef struct {
     u8 data[];
 } Region;
 
-typedef u8 Stack[4096];
+typedef struct {
+    struct Stack *last;
+    u32 saved_sp;
+    u8 data[STACK_CHUNK_SIZE];
+} Stack;
 
 /*
  * Allocate a new region.
