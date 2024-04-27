@@ -26,24 +26,22 @@ Region *new_region(size_t size) {
 
 Pointer alloc_object(Region *r, u64 size) {
     // I'd love to figure out how to have less conditionals in this function, but it's just a prototype.
-    size_t offset = 0;
-    while (offset < r->offset) {
-        // negative generation means free
-        // the absolute value of the generation is what the last generation was, then we add one to get the current generation
-        i64 local_generation;
-        memcpy(&local_generation, r->data + offset, sizeof(local_generation));
-        u64 local_size;
-        memcpy(&local_size, r->data + offset + sizeof(local_generation), sizeof(local_size));
-        if (local_generation < 0 /*freed*/ && local_size <= size /*fits*/) {
-            i64 new_generation = -local_generation + 1;
-            memcpy(r->data + offset, &new_generation, sizeof(new_generation));
-            memcpy(r->data + offset + sizeof(new_generation), &size, sizeof(size));
-            r->offset = offset + METADATA_OFFSET + size;
-            return (Pointer){new_generation, r->data + offset + METADATA_OFFSET}; // pointer skips over the generation and size
-        }
-        offset += METADATA_OFFSET + r->data[offset];
-    }
     if (r->offset + METADATA_OFFSET + size > r->capacity) {
+        for (size_t offset = 0; offset < r->offset; offset += METADATA_OFFSET + r->data[offset]) {
+            // negative generation means free
+            // the absolute value of the generation is what the last generation was, then we add one to get the current generation
+            i64 local_generation;
+            memcpy(&local_generation, r->data + offset, sizeof(local_generation));
+            u64 local_size;
+            memcpy(&local_size, r->data + offset + sizeof(local_generation), sizeof(local_size));
+            if (local_generation < 0 /*freed*/ && local_size <= size /*fits*/) {
+                i64 new_generation = -local_generation + 1;
+                memcpy(r->data + offset, &new_generation, sizeof(new_generation));
+                memcpy(r->data + offset + sizeof(new_generation), &size, sizeof(size));
+                r->offset = offset + METADATA_OFFSET + size;
+                return (Pointer){new_generation, r->data + offset + METADATA_OFFSET}; // pointer skips over the generation and size
+            }
+        }
         exit(1); // this will jump to an exception handler eventually
     } else {
         i64 first_generation = 1;
