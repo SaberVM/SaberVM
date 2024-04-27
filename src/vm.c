@@ -104,9 +104,9 @@ void free_object(Pointer ptr) {
 
 // start a new contiguous stack chunk if the given size wouldn't fit.
 // The caller must guarantee that the given size is less than STACK_CHUNK_SIZE
-void ensure_size(Stack *stack, u32 *sp, size_t size) {
+void ensure_size(struct Stack *stack, u32 *sp, size_t size) {
     if (*sp + size > STACK_CHUNK_SIZE) {
-        Stack *new_stack = malloc(sizeof(Stack));
+        struct Stack *new_stack = malloc(sizeof(struct Stack));
         new_stack->last = stack;
         new_stack->saved_sp = *sp;
         *sp = 0;
@@ -121,7 +121,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
     dbg("\n");
     u32 pc = 0;
     u32 sp = 0;
-    Stack *stack = malloc(sizeof(Stack));
+    struct Stack *stack = malloc(sizeof(struct Stack));
     while (1) {
         dbg("pc: %d, sp: %d\n", pc, sp);
         for (u32 i = 0; i < sp; i++) {

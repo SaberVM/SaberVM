@@ -43,11 +43,11 @@ typedef struct {
     u8 data[];
 } Region;
 
-typedef struct {
+struct Stack {
     struct Stack *last;
     u32 saved_sp;
     u8 data[STACK_CHUNK_SIZE];
-} Stack;
+};
 
 /*
  * Allocate a new region.
