@@ -51,6 +51,9 @@ pub enum Op1 {
     ArrInit,
     ArrProj,
     AddI32,
+    MulI32,
+    DivI32,
+    CallNZ,
 }
 
 /// The type of unverified ops.
@@ -76,6 +79,9 @@ pub enum Op2 {
     ArrInit(usize),
     ArrProj(usize),
     AddI32,
+    MulI32,
+    DivI32,
+    CallNZ,
 }
 
 #[derive(Debug)]

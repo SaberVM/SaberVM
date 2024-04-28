@@ -93,5 +93,8 @@ fn op_to_bytes(op: &Op2) -> Vec<u8> {
         Op2::ArrInit(size) => [vec![16], size.to_le_bytes().to_vec()].concat(),
         Op2::ArrProj(size) => [vec![17], size.to_le_bytes().to_vec()].concat(),
         Op2::AddI32 => vec![18],
+        Op2::MulI32 => vec![19],
+        Op2::DivI32 => vec![20],
+        Op2::CallNZ => vec![21],
     }
 }

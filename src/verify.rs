@@ -438,9 +438,14 @@ pub fn definition_pass(
                     }
                 }
                 Op1::Call => {
-                    let mb_type = stack_type.pop();
-                    match mb_type {
-                        Some(t) => handle_call(pos, &t, &mut stack_type, &mut compile_time_stack)?,
+                    match stack_type.pop() {
+                        Some(t) => handle_call(
+                            pos,
+                            &t,
+                            &mut stack_type,
+                            &mut compile_time_stack,
+                            Op1::Call,
+                        )?,
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     }
                     verified_ops.push(Op2::Call)
@@ -602,6 +607,51 @@ pub fn definition_pass(
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
+                Op1::MulI32 => match stack_type.pop() {
+                    Some(Type::I32) => match stack_type.pop() {
+                        Some(Type::I32) => {
+                            stack_type.push(Type::I32);
+                            verified_ops.push(Op2::MulI32);
+                        }
+                        Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    },
+                    Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                },
+                Op1::DivI32 => match stack_type.pop() {
+                    Some(Type::I32) => match stack_type.pop() {
+                        Some(Type::I32) => {
+                            stack_type.push(Type::I32);
+                            verified_ops.push(Op2::DivI32);
+                        }
+                        Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    },
+                    Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                },
+                Op1::CallNZ => match stack_type.pop() {
+                    Some(t1) => match stack_type.pop() {
+                        Some(t2) if type_eq(&t1, &t2) => match stack_type.pop() {
+                            Some(Type::I32) => {
+                                handle_call(
+                                    pos,
+                                    &t1,
+                                    &mut stack_type,
+                                    &mut compile_time_stack,
+                                    Op1::CallNZ,
+                                )?;
+                                verified_ops.push(Op2::CallNZ);
+                            }
+                            Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                        },
+                        Some(t2) => return Err(Error::TypeError(pos, *op, t1, t2)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    },
+                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                },
             },
         }
         pos += 1;
@@ -618,6 +668,7 @@ fn handle_call(
     t: &Type,
     stack_type: &mut Vec<Type>,
     compile_time_stack: &mut Vec<CTStackVal>,
+    op1: Op1,
 ) -> Result<(), Error> {
     match t {
         Type::Func(args) => {
@@ -653,13 +704,13 @@ fn handle_call(
             match mb_t {
                 Some(CTStackVal::Type(t)) => {
                     if t.size() != *size {
-                        return Err(Error::SizeError(pos, Op1::Call, *size, t.size()));
+                        return Err(Error::SizeError(pos, op1, *size, t.size()));
                     }
                     let new_t = substitute_t(&*body, &HashMap::from([(*var, t)]), &HashMap::new());
-                    handle_call(pos, &new_t, stack_type, compile_time_stack)
+                    handle_call(pos, &new_t, stack_type, compile_time_stack, op1)
                 }
-                Some(ctval) => return Err(Error::KindError(pos, Op1::Call, Kind::Type, ctval)),
-                None => return Err(Error::TypeErrorEmptyCTStack(pos, Op1::Call)),
+                Some(ctval) => return Err(Error::KindError(pos, op1, Kind::Type, ctval)),
+                None => return Err(Error::TypeErrorEmptyCTStack(pos, op1)),
             }
         }
         Type::ForallRegion(var, body, captured_rgns) => {
@@ -667,17 +718,17 @@ fn handle_call(
             match mb_r {
                 Some(CTStackVal::Region(r)) => {
                     if var.unique && captured_rgns.iter().any(|r2| r2.id == r.id) {
-                        return Err(Error::RegionAccessError(pos, Op1::Call, r));
+                        return Err(Error::RegionAccessError(pos, op1, r));
                     }
                     let new_t =
                         substitute_t(&*body, &HashMap::new(), &HashMap::from([(var.id, r)]));
-                    handle_call(pos, &new_t, stack_type, compile_time_stack)
+                    handle_call(pos, &new_t, stack_type, compile_time_stack, op1)
                 }
-                Some(ctval) => return Err(Error::KindError(pos, Op1::Call, Kind::Region, ctval)),
-                None => return Err(Error::TypeErrorEmptyCTStack(pos, Op1::Call)),
+                Some(ctval) => return Err(Error::KindError(pos, op1, Kind::Region, ctval)),
+                None => return Err(Error::TypeErrorEmptyCTStack(pos, op1)),
             }
         }
-        _ => return Err(Error::TypeErrorFunctionExpected(pos, Op1::Call, t.clone())),
+        _ => return Err(Error::TypeErrorFunctionExpected(pos, op1, t.clone())),
     }
 }
 

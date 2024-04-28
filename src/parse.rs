@@ -153,6 +153,9 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
                 0x1D => Op1::ArrInit,
                 0x1E => Op1::ArrProj,
                 0x1F => Op1::AddI32,
+                0x20 => Op1::MulI32,
+                0x21 => Op1::DivI32,
+                0x22 => Op1::CallNZ,
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }
@@ -192,6 +195,10 @@ fn parse(mut tokens_iter: std::slice::Iter<'_, Op1>, n: u32) -> Result<Vec<Stmt1
                 None => break,
                 Some(Op1::Call) => {
                     current_stmt_opcodes.push(Op1::Call);
+                    break;
+                }
+                Some(Op1::CallNZ) => {
+                    current_stmt_opcodes.push(Op1::CallNZ);
                     break;
                 }
                 Some(Op1::Halt) => {
