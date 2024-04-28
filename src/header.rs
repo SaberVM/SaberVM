@@ -50,6 +50,7 @@ pub enum Op1 {
     Arr,
     ArrInit,
     ArrProj,
+    AddI32,
 }
 
 /// The type of unverified ops.
@@ -74,6 +75,7 @@ pub enum Op2 {
     NewArr(usize),
     ArrInit(usize),
     ArrProj(usize),
+    AddI32,
 }
 
 #[derive(Debug)]
@@ -111,7 +113,7 @@ pub enum Type {
     Forall(Id, usize, Box<Type>),
     ForallRegion(Region, Box<Type>, Vec<Region>),
     Exists(Id, usize, Box<Type>),
-    Array(Box<Type>, Region)
+    Array(Box<Type>, Region),
 }
 
 impl Type {

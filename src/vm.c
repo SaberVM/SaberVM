@@ -312,6 +312,14 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             sp += elem_size;
             break;
         }
+        case 18: {
+            dbg("add two i32s!\n");
+            pc++;
+            POP(i32, a);
+            POP(i32, b);
+            PUSH(i32, a + b);
+            break;
+        }
         default: {
             printf("internal error!! Unknown IR op %d, please let the SaberVM team know!!", instrs[pc]);
             exit(1);

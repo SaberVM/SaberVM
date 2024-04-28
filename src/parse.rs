@@ -152,6 +152,7 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
                 0x1C => Op1::Arr,
                 0x1D => Op1::ArrInit,
                 0x1E => Op1::ArrProj,
+                0x1F => Op1::AddI32,
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }
