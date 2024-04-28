@@ -47,6 +47,9 @@ pub enum Op1 {
     FreeRgn,
     Ptr,
     Deref,
+    Arr,
+    ArrInit,
+    ArrProj,
 }
 
 /// The type of unverified ops.
@@ -68,6 +71,9 @@ pub enum Op2 {
     NewRgn(usize),
     FreeRgn,
     Deref(usize),
+    NewArr(usize),
+    ArrInit(usize),
+    ArrProj(usize),
 }
 
 #[derive(Debug)]
@@ -105,6 +111,7 @@ pub enum Type {
     Forall(Id, usize, Box<Type>),
     ForallRegion(Region, Box<Type>, Vec<Region>),
     Exists(Id, usize, Box<Type>),
+    Array(Box<Type>, Region)
 }
 
 impl Type {
@@ -119,6 +126,7 @@ impl Type {
             Self::Forall(_id, _size, t) => t.size(),
             Self::ForallRegion(_r, t, _captured_rgns) => t.size(),
             Self::Exists(_id, _size, t) => t.size(),
+            Self::Array(_t, _r) => 16,
         }
     }
 }
@@ -192,4 +200,10 @@ pub enum Error {
     TypeErrorDoubleInit(Pos, Op1, u8),
     TypeErrorUninitializedRead(Pos, Op1, u8),
     TooBigForStack(Pos, Op1, Type),
+    ForwardDeclNotType(Type),
+    ForwardDeclRuntimeOp(Op1),
+    ForwardDeclBadStack(Vec<CTStackVal>),
+    UnknownGlobalFunc(Pos, Op1, Label),
+    UnexpectedEOF,
+    TypeErrorArrayExpected(Pos, Op1, Type),
 }

@@ -23,7 +23,7 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
     let mut a = [0, 0, 0, 0];
     for i in 0..4 {
         match bytes_iter.next() {
-            None => panic!("unexpected eof (this shouldn't be a panic tbh)"),
+            None => return Err(Error::UnexpectedEOF),
             Some(b) => {
                 a[i] = *b;
                 pos += 1;
@@ -149,6 +149,9 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
                 0x19 => Op1::FreeRgn,
                 0x1A => Op1::Ptr,
                 0x1B => Op1::Deref,
+                0x1C => Op1::Arr,
+                0x1D => Op1::ArrInit,
+                0x1E => Op1::ArrProj,
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }
@@ -167,7 +170,7 @@ fn parse_forward_decs(
     for i in 0..n {
         loop {
             match tokens_iter.next() {
-                None => panic!("this shouldn't be a panic"),
+                None => return Err(Error::UnexpectedEOF),
                 Some(Op1::Lced) => break,
                 Some(op) => current_stmt_opcodes.push(*op),
             }
@@ -202,7 +205,7 @@ fn parse(mut tokens_iter: std::slice::Iter<'_, Op1>, n: u32) -> Result<Vec<Stmt1
     }
     if current_stmt_opcodes.len() > 0 {
         dbg!(current_stmt_opcodes);
-        panic!("this shouldn't be a panic either");
+        return Err(Error::UnexpectedEOF);
     }
     Ok(parsed_stmts)
 }

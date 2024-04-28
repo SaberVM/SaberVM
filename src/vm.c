@@ -42,6 +42,8 @@ Pointer alloc_object(Region *r, u64 size) {
                 return (Pointer){new_generation, r->data + offset + METADATA_OFFSET}; // pointer skips over the generation and size
             }
         }
+        dbg("r->offet: %lu, size: %lu, r->capacity: %lu\n", r->offset, size, r->capacity);
+        printf("Runtime Error! Allocation too big for region!\n");
         exit(1); // this will jump to an exception handler eventually
     } else {
         i64 first_generation = 1;
@@ -69,7 +71,7 @@ void check_ptr(Pointer ptr) {
     dbg("check generation %ld\n", g);
     if (ptr.generation != g) {
         dbg("%ld != %ld\n", ptr.generation, g);
-        printf("Runtime error! The program is trying to access memory that's already been freed!\n");
+        printf("Runtime Error! The program is trying to access memory that's already been freed!\n");
         exit(1); // this will be a jump to exception handler soon
     }
 }
@@ -261,6 +263,58 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             memcpy(stack->data + sp, ptr.reference, size);
             sp += size;
             break;
+        }
+        case 15: {
+            dbg("new array!\n");
+            pc++;
+            INSTR_PARAM(size_t, elem_size);
+            POP(i32, len);
+            POP(Region*, r);
+            size_t size = (elem_size + 1) * len;
+            dbg("size: %ld\n", size);
+            Pointer ptr = alloc_object(r, size);
+            memset(ptr.reference, 0, size);
+            ensure_size(stack, &sp, sizeof(ptr));
+            PUSH(Pointer, ptr);
+            break;
+        }
+        case 16: {
+            dbg("initialize array component!\n");
+            pc++;
+            INSTR_PARAM(size_t, elem_size);
+            POP(i32, i);
+            Pointer ptr;
+            memcpy(&ptr, stack->data + sp - elem_size - sizeof(ptr), sizeof(ptr));
+            size_t n = (elem_size + 1) * i;
+            if (*(ptr.reference + n) == (u8)1) {
+                printf("Runtime Error! Double array component initialization. Arrays in SaberVM are immutable.\n");
+                exit(1);
+            }
+            memcpy(ptr.reference + n + 1, stack->data + sp - elem_size, elem_size);
+            *(ptr.reference + n) = (u8)1;
+            sp -= elem_size + sizeof(ptr);
+            PUSH(Pointer, ptr);
+            break;
+        }
+        case 17: {
+            dbg("project from array!\n");
+            pc++;
+            INSTR_PARAM(size_t, elem_size);
+            POP(i32, i);
+            size_t n = (elem_size + 1) * i;
+            POP(Pointer, ptr);
+            ensure_size(stack, &sp, elem_size);
+            if (*(ptr.reference + n) == (u8)0) {
+                printf("Runtime Error! Reading from uninitialized array component.\n");
+                exit(1);
+            }
+            memcpy(stack->data + sp, ptr.reference + n + 1, elem_size);
+            sp += elem_size;
+            break;
+        }
+        default: {
+            printf("internal error!! Unknown IR op %d, please let the SaberVM team know!!", instrs[pc]);
+            exit(1);
         }
         }
     }

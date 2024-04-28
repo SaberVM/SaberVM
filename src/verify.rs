@@ -77,13 +77,14 @@ pub fn type_pass(stmt: &ForwardDec, mut fresh_id: u32) -> Result<(Label, Type, u
             Op1::CTGet(i) => handle_ctget(pos, i, &mut compile_time_stack)?,
             Op1::Size(s) => compile_time_stack.push(CTStackVal::Size((*s).try_into().unwrap())),
             Op1::Ptr => handle_ptr(pos, op, &mut compile_time_stack)?,
-            _ => panic!(),
+            Op1::Arr => handle_arr(pos, op, &mut compile_time_stack)?,
+            op => return Err(Error::ForwardDeclRuntimeOp(*op)),
         }
         pos += 1;
     }
     match &compile_time_stack[..] {
         [CTStackVal::Type(t)] => Ok((*label, t.clone(), pos)),
-        _ => panic!(),
+        _ => return Err(Error::ForwardDeclBadStack(compile_time_stack)),
     }
 }
 
@@ -345,6 +346,26 @@ pub fn definition_pass(
                             stack_type.push(t);
                             verified_ops.push(Op2::Alloca(size));
                         }
+                        Some(CTStackVal::Type(Type::Array(t, r))) => {
+                            match stack_type.pop() {
+                                Some(Type::I32) => 
+                                    match stack_type.pop() {
+                                        Some(Type::Handle(r2)) if r2.id != r.id => return Err(Error::RegionError(pos, *op, r, r2)),
+                                        Some(Type::Handle(_r)) => {
+                                            if rgn_vars.iter().all(|r2: &Region| r.id != r2.id) {
+                                                return Err(Error::RegionAccessError(pos, *op, r));
+                                            }
+                                            let size = (*t).size();
+                                            stack_type.push(Type::Array(t, r));
+                                            verified_ops.push(Op2::NewArr(size));
+                                        }
+                                        Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
+                                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                                    }
+                                Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                                None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+                            }
+                        }
                         Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
                         None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
                     };
@@ -435,7 +456,7 @@ pub fn definition_pass(
                 Op1::GlobalFunc(label) => {
                     let t = types
                         .get(label)
-                        .ok_or_else(|| panic!("this should be an Err"))?;
+                        .ok_or(Error::UnknownGlobalFunc(pos, *op, *label))?;
                     stack_type.push(t.clone());
                     verified_ops.push(Op2::GlobalFunc(*label))
                 }
@@ -529,6 +550,43 @@ pub fn definition_pass(
                     Some(t) => return Err(Error::TypeErrorPtrExpected(pos, *op, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
+                Op1::Arr => handle_arr(pos, op, &mut compile_time_stack)?,
+                Op1::ArrInit => match stack_type.pop() {
+                    Some(Type::I32) => match stack_type.pop() {
+                        Some(t) => match stack_type.pop() {
+                            Some(Type::Array(t2, r)) if type_eq(&t, &t2) => {
+                                if rgn_vars.iter().all(|r2| r2.id != r.id) {
+                                    return Err(Error::RegionAccessError(pos, *op, r))
+                                }
+                                let size = t.size();
+                                stack_type.push(Type::Array(Box::new(t), r));
+                                verified_ops.push(Op2::ArrInit(size))
+                            }
+                            Some(Type::Array(t2, _)) => return Err(Error::TypeError(pos, *op, t, *t2)),
+                            Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op))
+                        }
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    }
+                    Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                    None => return Err(Error::TypeErrorEmptyStack(pos, *op))
+                }
+                Op1::ArrProj => match stack_type.pop() {
+                    Some(Type::I32) => match stack_type.pop() {
+                        Some(Type::Array(t, r)) => {
+                            if rgn_vars.iter().all(|r2| r2.id != r.id) {
+                                return Err(Error::RegionAccessError(pos, *op, r));
+                            }
+                            let t = *t;
+                            stack_type.push(t.clone());
+                            verified_ops.push(Op2::ArrProj(t.size()));
+                        }
+                        Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op))
+                    }
+                    Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                    None => return Err(Error::TypeErrorEmptyStack(pos, *op))
+                }
             },
         }
         pos += 1;
@@ -814,6 +872,21 @@ fn handle_ptr(pos: u32, op: &Op1, compile_time_stack: &mut Vec<CTStackVal>) -> R
     }
 }
 
+pub fn handle_arr(pos: u32, op: &Op1, compile_time_stack: &mut Vec<CTStackVal>) -> Result<(), Error> {
+    match compile_time_stack.pop() {
+        Some(CTStackVal::Type(t)) => match compile_time_stack.pop() {
+            Some(CTStackVal::Region(r)) => {
+                compile_time_stack.push(CTStackVal::Type(Type::Array(Box::new(t), r)));
+                Ok(())
+            }
+            Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Region, ctval)),
+            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+        }
+        Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
+        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+    }
+}
+
 /// Perform some variable substitutions within a type.
 /// This does not modify the original.
 pub fn substitute_t(typ: &Type, tsubs: &HashMap<Id, Type>, rsubs: &HashMap<Id, Region>) -> Type {
@@ -847,6 +920,7 @@ pub fn substitute_t(typ: &Type, tsubs: &HashMap<Id, Type>, rsubs: &HashMap<Id, R
             }
             Type::ForallRegion(*id, Box::new(substitute_t(t, tsubs, rsubs)), captured_rgns)
         }
+        Type::Array(t, r) => Type::Array(Box::new(substitute_t(t, tsubs, rsubs)), substitute_r(r, rsubs)),
     }
 }
 
@@ -902,6 +976,7 @@ pub fn type_eq(type1: &Type, type2: &Type) -> bool {
             let body2_subbed = substitute_t(&body2, &HashMap::new(), &sub);
             type_eq(body1, &body2_subbed)
         }
+        (Type::Array(t1, r1), Type::Array(t2, r2)) => r1 == r2 && type_eq(t1, t2),
         (_, _) => false,
     }
 }
@@ -923,6 +998,6 @@ fn setup_verifier(t: &Type) -> Result<(Vec<CTStackVal>, Vec<Type>), Error> {
             param_ts.reverse();
             Ok((vec![], param_ts.into()))
         }
-        _ => panic!("this should be an Err"),
+        t => return Err(Error::ForwardDeclNotType(t.clone())),
     }
 }
