@@ -271,9 +271,10 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             POP(i32, len);
             POP(Region*, r);
             size_t size = (elem_size + 1) * len;
-            dbg("size: %ld\n", size);
-            Pointer ptr = alloc_object(r, size);
-            memset(ptr.reference, 0, size);
+            dbg("size: %ld\n", sizeof(size) + size);
+            Pointer ptr = alloc_object(r, sizeof(size) + size);
+            memcpy(ptr.reference, &size, sizeof(size));
+            memset(ptr.reference + sizeof(size), 0, size);
             ensure_size(stack, &sp, sizeof(ptr));
             PUSH(Pointer, ptr);
             break;
@@ -286,12 +287,18 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             Pointer ptr;
             memcpy(&ptr, stack->data + sp - elem_size - sizeof(ptr), sizeof(ptr));
             size_t n = (elem_size + 1) * i;
-            if (*(ptr.reference + n) == (u8)1) {
+            size_t array_len;
+            memcpy(&array_len, ptr.reference, sizeof(array_len));
+            if (n + 1 + elem_size > array_len) {
+                printf("Runtime Error! Array index out of bounds during an initialization.\n");
+                exit(1);
+            }
+            if (*(ptr.reference + sizeof(array_len) + n) == (u8)1) {
                 printf("Runtime Error! Double array component initialization. Arrays in SaberVM are immutable.\n");
                 exit(1);
             }
-            memcpy(ptr.reference + n + 1, stack->data + sp - elem_size, elem_size);
-            *(ptr.reference + n) = (u8)1;
+            memcpy(ptr.reference + sizeof(array_len) + n + 1, stack->data + sp - elem_size, elem_size);
+            *(ptr.reference + sizeof(array_len) + n) = (u8)1;
             sp -= elem_size + sizeof(ptr);
             PUSH(Pointer, ptr);
             break;
@@ -303,12 +310,18 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             POP(i32, i);
             size_t n = (elem_size + 1) * i;
             POP(Pointer, ptr);
+            size_t array_len;
+            memcpy(&array_len, ptr.reference, sizeof(array_len));
+            if (n + 1 + elem_size > array_len) {
+                printf("Runtime Error! Array index out of bounds during a projection.\n");
+                exit(1);
+            }
             ensure_size(stack, &sp, elem_size);
-            if (*(ptr.reference + n) == (u8)0) {
+            if (*(ptr.reference + sizeof(array_len) + n) == (u8)0) {
                 printf("Runtime Error! Reading from uninitialized array component.\n");
                 exit(1);
             }
-            memcpy(stack->data + sp, ptr.reference + n + 1, elem_size);
+            memcpy(stack->data + sp, ptr.reference + sizeof(array_len) + n + 1, elem_size);
             sp += elem_size;
             break;
         }

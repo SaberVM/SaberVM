@@ -102,10 +102,16 @@ pub enum Stmt2 {
     Func(Pos, Type, Vec<Op2>),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RgnId {
+    Var(Id),
+    DataSection
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Region {
     pub unique: bool,
-    pub id: Id,
+    pub id: RgnId,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -214,4 +220,5 @@ pub enum Error {
     UnknownGlobalFunc(Pos, Op1, Label),
     UnexpectedEOF,
     TypeErrorArrayExpected(Pos, Op1, Type),
+    ReadOnlyRegionError(Pos, Op1, RgnId)
 }

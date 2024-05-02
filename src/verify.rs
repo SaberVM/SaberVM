@@ -414,7 +414,9 @@ pub fn definition_pass(
                                 })?;
                             }
                             Type::Ptr(boxed_t, r) => {
-                                if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                                if r.id == RgnId::DataSection {
+                                    return Err(Error::ReadOnlyRegionError(pos, *op, r.id))
+                                } else if rgn_vars.iter().all(|r2| r.id != r2.id) {
                                     return Err(Error::RegionAccessError(pos, *op, r));
                                 }
                                 match *boxed_t {
@@ -521,7 +523,7 @@ pub fn definition_pass(
                     fresh_id += 1;
                     let r = Region {
                         unique: true,
-                        id: id,
+                        id: RgnId::Var(id),
                     };
                     rgn_vars.push(r.clone());
                     stack_type.push(Type::Handle(r.clone()));
@@ -739,6 +741,9 @@ fn handle_handle(
 ) -> Result<(), Error> {
     match compile_time_stack.pop() {
         Some(CTStackVal::Region(r)) => {
+            if r.id == RgnId::DataSection {
+                return Err(Error::ReadOnlyRegionError(pos, *op, r.id))
+            }
             compile_time_stack.push(CTStackVal::Type(Type::Handle(r)));
             Ok(())
         }
@@ -817,7 +822,7 @@ fn handle_rgn(
     let id = Id(*label, *fresh_id);
     let r = Region {
         unique: *next_region_is_unique,
-        id: id,
+        id: RgnId::Var(id),
     };
     *fresh_id += 1;
     compile_time_stack.push(CTStackVal::Region(r.clone()));
@@ -959,7 +964,7 @@ pub fn handle_arr(
 
 /// Perform some variable substitutions within a type.
 /// This does not modify the original.
-pub fn substitute_t(typ: &Type, tsubs: &HashMap<Id, Type>, rsubs: &HashMap<Id, Region>) -> Type {
+pub fn substitute_t(typ: &Type, tsubs: &HashMap<Id, Type>, rsubs: &HashMap<RgnId, Region>) -> Type {
     match typ {
         Type::I32 => Type::I32,
         Type::Handle(r) => Type::Handle(substitute_r(r, rsubs)),
@@ -999,7 +1004,7 @@ pub fn substitute_t(typ: &Type, tsubs: &HashMap<Id, Type>, rsubs: &HashMap<Id, R
 
 /// Perform some variable substitutions in a compile-time region value.
 /// This does not modify the original
-pub fn substitute_r(r: &Region, rsubs: &HashMap<Id, Region>) -> Region {
+pub fn substitute_r(r: &Region, rsubs: &HashMap<RgnId, Region>) -> Region {
     match rsubs.get(&r.id) {
         Some(r2) => *r2,
         None => *r,
