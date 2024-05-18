@@ -218,8 +218,17 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 8: {
             dbg("print!\n");
             pc++;
-            POP(i32, value);
-            printf("%d\n", value);
+            POP(Pointer, ptr);
+            if (ptr.generation == -1) {
+                // -1 generation means data section string
+                size_t size = (size_t)instrs + 4 + (size_t)data_section_size - (size_t)ptr.reference;
+                printf("%.*s", (int)size, ptr.reference);
+            } else {
+                check_ptr(ptr);
+                size_t array_len;
+                memcpy(&array_len, ptr.reference, sizeof(array_len));
+                printf("%.*s", (int)array_len, ptr.reference + sizeof(array_len));
+            }
             break;
         }
         case 9: {
@@ -387,6 +396,31 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             ensure_size(stack, &sp, elem_size);
             memcpy(stack->data + sp, ptr.reference + n, elem_size);
             sp += elem_size;
+            break;
+        }
+        case 24: {
+            dbg("print n characters!\n");
+            pc++;
+            POP(i32, n);
+            POP(Pointer, ptr);
+            if (ptr.generation == -1) {
+                // -1 generation means data section string
+                size_t rest_of_data_section = instrs + 4 + data_section_size - ptr.reference;
+                u32 size = (u32)n;
+                if (size > rest_of_data_section) {
+                    size = rest_of_data_section;
+                }
+                printf("%.*s", (int)size, ptr.reference);
+            } else {
+                check_ptr(ptr);
+                size_t array_len;
+                memcpy(&array_len, ptr.reference, sizeof(array_len));
+                u32 size = (u32)n;
+                if (size > array_len) {
+                    size = array_len;
+                }
+                printf("%.*s", (int)size, ptr.reference + sizeof(array_len));
+            }
             break;
         }
         default: {
