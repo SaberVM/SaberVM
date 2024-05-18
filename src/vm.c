@@ -371,6 +371,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
                 .generation = -1 
             };
             PUSH(Pointer, ptr);
+            break;
         }
         case 23: {
             dbg("project from data-section array!\n");

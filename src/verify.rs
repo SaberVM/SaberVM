@@ -691,6 +691,9 @@ pub fn definition_pass(
                     Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
                     None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
                 },
+                Op1::DataSec => {
+                    compile_time_stack.push(CTStackVal::Region(Region{unique: false, id: DataSection}));
+                }
             },
         }
         pos += 1;

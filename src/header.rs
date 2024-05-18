@@ -55,6 +55,7 @@ pub enum Op1 {
     DivI32,
     CallNZ,
     Data(u32),
+    DataSec,
 }
 
 /// The type of unverified ops.
