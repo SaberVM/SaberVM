@@ -80,6 +80,8 @@ pub fn type_pass(stmt: &ForwardDec, mut fresh_id: u32) -> Result<(Label, Type, u
             Op1::Size(s) => compile_time_stack.push(CTStackVal::Size((*s).try_into().unwrap())),
             Op1::Ptr => handle_ptr(pos, op, &mut compile_time_stack)?,
             Op1::Arr => handle_arr(pos, op, &mut compile_time_stack)?,
+            Op1::DataSec => compile_time_stack.push(CTStackVal::Region(Region {unique: false, id: DataSection})),
+            Op1::U8 => compile_time_stack.push(CTStackVal::Type(Type::U8)),
             op => return Err(Error::ForwardDeclRuntimeOp(*op)),
         }
         pos += 1;
@@ -694,6 +696,9 @@ pub fn definition_pass(
                 Op1::DataSec => {
                     compile_time_stack.push(CTStackVal::Region(Region{unique: false, id: DataSection}));
                 }
+                Op1::U8 => {
+                    compile_time_stack.push(CTStackVal::Type(Type::U8));
+                }
             },
         }
         pos += 1;
@@ -1016,6 +1021,7 @@ pub fn handle_arr(
 pub fn substitute_t(typ: &Type, tsubs: &HashMap<Id, Type>, rsubs: &HashMap<RgnId, Region>) -> Type {
     match typ {
         Type::I32 => Type::I32,
+        Type::U8 => Type::U8,
         Type::Handle(r) => Type::Handle(substitute_r(r, rsubs)),
         Type::Tuple(ts) => Type::Tuple(
             ts.iter()

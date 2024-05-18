@@ -187,6 +187,7 @@ fn lex(bytes: &ByteStream) -> Result<(usize, Vec<u8>, LexedOpcodes, u32), Error>
                     },
                 },
                 0x24 => Op1::DataSec,
+                0x25 => Op1::U8,
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }

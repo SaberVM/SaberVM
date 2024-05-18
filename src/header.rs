@@ -56,6 +56,7 @@ pub enum Op1 {
     CallNZ,
     Data(u32),
     DataSec,
+    U8,
 }
 
 /// The type of unverified ops.
@@ -121,6 +122,7 @@ pub struct Region {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Type {
     I32,
+    U8,
     Handle(Region),
     Tuple(Vec<(bool, Type)>),
     Ptr(Box<Type>, Region),
@@ -136,6 +138,7 @@ impl Type {
     pub fn size(&self) -> usize {
         match self {
             Self::I32 => 4,
+            Self::U8 => 1,
             Self::Handle(_r) => 8,
             Self::Tuple(ts) => ts.iter().map(|(_, t)| t.size()).sum(),
             Self::Ptr(_t, _r) => 16,
