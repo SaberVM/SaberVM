@@ -4,10 +4,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use crate::header::RgnId::DataSection;
 use crate::header::*;
 use std::collections::HashMap;
 
 pub fn go(
+    data_section_len: usize,
     types_instrs: Vec<ForwardDec>,
     unverified_stmts: Vec<Stmt1>,
 ) -> Result<Vec<Stmt2>, Error> {
@@ -24,7 +26,7 @@ pub fn go(
     }
     let verified_stmts: Vec<Stmt2> = unverified_stmts
         .iter()
-        .map(|stmt| definition_pass(stmt, &types, fresh_id))
+        .map(|stmt| definition_pass(data_section_len, stmt, &types, fresh_id))
         .collect::<Result<Vec<_>, Error>>()?;
     match verified_stmts.get(0) {
         Some(Stmt2::Func(_, Type::Func(param_ts), _)) => {
@@ -89,6 +91,7 @@ pub fn type_pass(stmt: &ForwardDec, mut fresh_id: u32) -> Result<(Label, Type, u
 }
 
 pub fn definition_pass(
+    data_section_len: usize,
     stmt: &Stmt1,
     types: &HashMap<Label, Type>,
     mut fresh_id: u32,
@@ -108,7 +111,7 @@ pub fn definition_pass(
     let mut verified_ops: Vec<Op2> = vec![];
 
     // The list of region variables the function is quantified (polymorphic) over.
-    let mut rgn_vars: Vec<Region> = vec![];
+    let mut rgn_vars: Vec<Region> = vec![Region{unique: false, id: DataSection}];
     for ctval in &compile_time_stack {
         if let CTStackVal::Region(r) = ctval {
             rgn_vars.push(r.clone());
@@ -415,7 +418,7 @@ pub fn definition_pass(
                             }
                             Type::Ptr(boxed_t, r) => {
                                 if r.id == RgnId::DataSection {
-                                    return Err(Error::ReadOnlyRegionError(pos, *op, r.id))
+                                    return Err(Error::ReadOnlyRegionError(pos, *op, r.id));
                                 } else if rgn_vars.iter().all(|r2| r.id != r2.id) {
                                     return Err(Error::RegionAccessError(pos, *op, r));
                                 }
@@ -559,16 +562,19 @@ pub fn definition_pass(
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
                 Op1::Arr => handle_arr(pos, op, &mut compile_time_stack)?,
-                Op1::ArrInit => match stack_type.pop() {
+                Op1::ArrMut => match stack_type.pop() {
                     Some(Type::I32) => match stack_type.pop() {
                         Some(t) => match stack_type.pop() {
+                            Some(Type::Array(_, r)) if r.id == DataSection => {
+                                return Err(Error::CannotMutateDataSection(pos, *op));
+                            }
                             Some(Type::Array(t2, r)) if type_eq(&t, &t2) => {
                                 if rgn_vars.iter().all(|r2| r2.id != r.id) {
                                     return Err(Error::RegionAccessError(pos, *op, r));
                                 }
                                 let size = t.size();
                                 stack_type.push(Type::Array(Box::new(t), r));
-                                verified_ops.push(Op2::ArrInit(size))
+                                verified_ops.push(Op2::ArrMut(size))
                             }
                             Some(Type::Array(t2, _)) => {
                                 return Err(Error::TypeError(pos, *op, t, *t2))
@@ -589,7 +595,11 @@ pub fn definition_pass(
                             }
                             let t = *t;
                             stack_type.push(t.clone());
-                            verified_ops.push(Op2::ArrProj(t.size()));
+                            if r.id == DataSection {
+                                verified_ops.push(Op2::DataIndex(t.size()))
+                            } else {
+                                verified_ops.push(Op2::ArrProj(t.size()))
+                            }
                         }
                         Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
@@ -654,6 +664,33 @@ pub fn definition_pass(
                     },
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
+                Op1::Data(loc) => match compile_time_stack.pop() {
+                    Some(CTStackVal::Type(Type::Array(t, r))) if r.id == DataSection => {
+                        let loc = *loc as usize;
+                        stack_type.push(Type::Array(t, r.clone()));
+                        verified_ops.push(Op2::Data(loc));
+                    }
+                    Some(CTStackVal::Type(t)) => {
+                        if valid_data_section_type(&t) {
+                            let size = t.size();
+                            let loc = *loc as usize;
+                            if loc + size > data_section_len {
+                                return Err(Error::DataSectionLoadOutOfBounds(
+                                    pos,
+                                    *op,
+                                    loc,
+                                    data_section_len,
+                                ));
+                            }
+                            stack_type.push(Type::Ptr(Box::new(t), Region{unique: false, id: DataSection}));
+                            verified_ops.push(Op2::Data(loc));
+                        } else {
+                            return Err(Error::InvalidDataSectionType(pos, *op, t.clone()));
+                        }
+                    }
+                    Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
+                    None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+                },
             },
         }
         pos += 1;
@@ -663,6 +700,15 @@ pub fn definition_pass(
     }
     // wrap t in the quantifiers from kind_context
     Ok(Stmt2::Func(*label, my_type, verified_ops))
+}
+
+fn valid_data_section_type(t: &Type) -> bool {
+    match t {
+        Type::I32 => true,
+        Type::Array(_, r) if r.id == DataSection => true,
+        Type::Tuple(components) if components.iter().all(|(_, t)| valid_data_section_type(t)) => true,
+        _ => false,
+    }
 }
 
 fn handle_call(
@@ -742,7 +788,7 @@ fn handle_handle(
     match compile_time_stack.pop() {
         Some(CTStackVal::Region(r)) => {
             if r.id == RgnId::DataSection {
-                return Err(Error::ReadOnlyRegionError(pos, *op, r.id))
+                return Err(Error::ReadOnlyRegionError(pos, *op, r.id));
             }
             compile_time_stack.push(CTStackVal::Type(Type::Handle(r)));
             Ok(())

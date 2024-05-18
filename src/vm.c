@@ -66,6 +66,11 @@ void check_ptr(Pointer ptr) {
         dbg(" %d",  *(u8*)(ptr.reference - METADATA_OFFSET - 16 + i));
     }
     dbg("\n");
+    if (ptr.generation < 0) {
+        // negative generation in a pointer means the referent is unfreeable
+        // and therefore doesn't have a generation tag in the preceding memory
+        return;
+    }
     i64 g;
     memcpy(&g, ptr.reference - METADATA_OFFSET, sizeof(g));
     dbg("check generation %ld\n", g);
@@ -119,7 +124,9 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         dbg(" %d", instrs[i]);
     }
     dbg("\n");
-    u32 pc = 0;
+    u32 data_section_size;
+    memcpy(&data_section_size, instrs, sizeof(data_section_size));
+    u32 pc = sizeof(data_section_size) + data_section_size;
     u32 sp = 0;
     struct Stack *stack = malloc(sizeof(struct Stack));
     while (1) {
@@ -270,7 +277,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             INSTR_PARAM(size_t, elem_size);
             POP(i32, len);
             POP(Region*, r);
-            size_t size = (elem_size + 1) * len;
+            size_t size = elem_size * len;
             dbg("size: %ld\n", sizeof(size) + size);
             Pointer ptr = alloc_object(r, sizeof(size) + size);
             memcpy(ptr.reference, &size, sizeof(size));
@@ -280,25 +287,20 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             break;
         }
         case 16: {
-            dbg("initialize array component!\n");
+            dbg("mutate array component!\n");
             pc++;
             INSTR_PARAM(size_t, elem_size);
             POP(i32, i);
             Pointer ptr;
             memcpy(&ptr, stack->data + sp - elem_size - sizeof(ptr), sizeof(ptr));
-            size_t n = (elem_size + 1) * i;
+            size_t n = elem_size * i;
             size_t array_len;
             memcpy(&array_len, ptr.reference, sizeof(array_len));
-            if (n + 1 + elem_size > array_len) {
+            if (n + elem_size > array_len) {
                 printf("Runtime Error! Array index out of bounds during an initialization.\n");
                 exit(1);
             }
-            if (*(ptr.reference + sizeof(array_len) + n) == (u8)1) {
-                printf("Runtime Error! Double array component initialization. Arrays in SaberVM are immutable.\n");
-                exit(1);
-            }
-            memcpy(ptr.reference + sizeof(array_len) + n + 1, stack->data + sp - elem_size, elem_size);
-            *(ptr.reference + sizeof(array_len) + n) = (u8)1;
+            memcpy(ptr.reference + sizeof(array_len) + n, stack->data + sp - elem_size, elem_size);
             sp -= elem_size + sizeof(ptr);
             PUSH(Pointer, ptr);
             break;
@@ -308,20 +310,17 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             pc++;
             INSTR_PARAM(size_t, elem_size);
             POP(i32, i);
-            size_t n = (elem_size + 1) * i;
+            size_t n = elem_size * i;
             POP(Pointer, ptr);
+            check_ptr(ptr);
             size_t array_len;
             memcpy(&array_len, ptr.reference, sizeof(array_len));
-            if (n + 1 + elem_size > array_len) {
+            if (n + elem_size > array_len) {
                 printf("Runtime Error! Array index out of bounds during a projection.\n");
                 exit(1);
             }
             ensure_size(stack, &sp, elem_size);
-            if (*(ptr.reference + sizeof(array_len) + n) == (u8)0) {
-                printf("Runtime Error! Reading from uninitialized array component.\n");
-                exit(1);
-            }
-            memcpy(stack->data + sp, ptr.reference + sizeof(array_len) + n + 1, elem_size);
+            memcpy(stack->data + sp, ptr.reference + sizeof(array_len) + n, elem_size);
             sp += elem_size;
             break;
         }
@@ -360,6 +359,33 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             } else {
                 pc = f;
             }
+            break;
+        }
+        case 22: {
+            dbg("load from data section!\n");
+            pc++;
+            INSTR_PARAM(size_t, offset);
+            Pointer ptr = (Pointer){
+                .reference = instrs + 4 + offset, 
+                // negative generation in a pointer means the referent is unfreeable. In this case, the referent is in the data section.
+                .generation = -1 
+            };
+            PUSH(Pointer, ptr);
+        }
+        case 23: {
+            dbg("project from data-section array!\n");
+            pc++;
+            INSTR_PARAM(size_t, elem_size);
+            POP(i32, i);
+            size_t n = elem_size * i;
+            POP(Pointer, ptr); // frontend ensures this is a data-section pointer, so we don't need to check it.
+            if (n + elem_size > data_section_size) {
+                printf("Runtime Error! Array index out of bounds during a projection from the data section.\n");
+                exit(1);
+            }
+            ensure_size(stack, &sp, elem_size);
+            memcpy(stack->data + sp, ptr.reference + n, elem_size);
+            sp += elem_size;
             break;
         }
         default: {

@@ -10,26 +10,34 @@ use crate::header::*;
 /// A sequence of (possibly parameterized) opcodes.
 type LexedOpcodes = Vec<Op1>;
 
-const BYTES_TO_SKIP: u32 = 4;
-
 /// Lex bytes into (possibly parameterized) intructions.
-fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
+fn lex(bytes: &ByteStream) -> Result<(usize, Vec<u8>, LexedOpcodes, u32), Error> {
     let mut bytes_iter = bytes.iter();
     let mut lexed_opcodes = vec![];
-    for _ in 0..BYTES_TO_SKIP {
-        bytes_iter.next();
+    let mut data_section_len_vec: [u8; 4] = [0, 0, 0, 0];
+    for i in 0..4 {
+        let Some(a) = bytes_iter.next() else {
+            return Err(Error::UnexpectedEOF);
+        };
+        data_section_len_vec[i] = *a;
     }
-    let mut pos = BYTES_TO_SKIP;
+    let data_section_len_u32 = u32::from_le_bytes(data_section_len_vec);
+    let data_section_len = data_section_len_u32 as usize;
+    // skip past whatever bytes are in the data section
+    let mut data_section = Vec::with_capacity(data_section_len);
+    for _ in 0..data_section_len {
+        data_section.push(*(bytes_iter.next().ok_or(Error::UnexpectedEOF)?));
+    }
     let mut a = [0, 0, 0, 0];
     for i in 0..4 {
         match bytes_iter.next() {
             None => return Err(Error::UnexpectedEOF),
             Some(b) => {
                 a[i] = *b;
-                pos += 1;
             }
         }
     }
+    let mut pos = 8 + data_section_len_u32;
     let n = u32::from_le_bytes(a);
     loop {
         match bytes_iter.next() {
@@ -150,18 +158,36 @@ fn lex(bytes: &ByteStream) -> Result<(LexedOpcodes, u32), Error> {
                 0x1A => Op1::Ptr,
                 0x1B => Op1::Deref,
                 0x1C => Op1::Arr,
-                0x1D => Op1::ArrInit,
+                0x1D => Op1::ArrMut,
                 0x1E => Op1::ArrProj,
                 0x1F => Op1::AddI32,
                 0x20 => Op1::MulI32,
                 0x21 => Op1::DivI32,
                 0x22 => Op1::CallNZ,
+                0x23 => match bytes_iter.next() {
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n1) => match bytes_iter.next() {
+                        None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                        Some(n2) => match bytes_iter.next() {
+                            None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                            Some(n3) => match bytes_iter.next() {
+                                None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                                Some(n4) => Op1::Data(
+                                    (*n4 as u32) << 24
+                                        | (*n3 as u32) << 16
+                                        | (*n2 as u32) << 8
+                                        | (*n1 as u32),
+                                ),
+                            },
+                        },
+                    },
+                },
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }
         pos += 1;
     }
-    Ok((lexed_opcodes, n))
+    Ok((data_section_len, data_section, lexed_opcodes, n))
 }
 
 fn parse_forward_decs(
@@ -219,10 +245,10 @@ fn parse(mut tokens_iter: std::slice::Iter<'_, Op1>, n: u32) -> Result<Vec<Stmt1
 }
 
 /// Lex a stream of bytes, maybe return an error, otherwise parse.
-pub fn go(istream: &ByteStream) -> Result<(Vec<ForwardDec>, Vec<Stmt1>), Error> {
+pub fn go(istream: &ByteStream) -> Result<(usize, Vec<u8>, Vec<ForwardDec>, Vec<Stmt1>), Error> {
     // this is two-pass currently (lex and parse); it would be straightforward to fuse these passes.
-    let (tokens, n) = lex(istream)?;
+    let (data_decs, data_section, tokens, n) = lex(istream)?;
     let (forward_decs, rest) = parse_forward_decs(&tokens, n)?;
     let stmts = parse(rest, n)?;
-    Ok((forward_decs, stmts))
+    Ok((data_decs, data_section, forward_decs, stmts))
 }

@@ -13,16 +13,16 @@ extern "C" {
     fn vm_function(bytes: *mut u8, len: usize) -> u8;
 }
 
-pub fn go(stmts: Vec<Stmt2>) {
-    let mut code = merge_stmts(stmts);
+pub fn go(data_section_len: usize, data_section: Vec<u8>, stmts: Vec<Stmt2>) {
+    let mut code = merge_stmts(data_section_len as u32, data_section, stmts);
     let len = code.len();
     dbg!(unsafe { vm_function(code.as_mut_ptr(), len) });
 }
 
-fn merge_stmts(stmts: Vec<Stmt2>) -> Vec<u8> {
-    let mut merged: Vec<u8> = Vec::new();
+fn merge_stmts(data_section_len: u32, data_section: Vec<u8>, stmts: Vec<Stmt2>) -> Vec<u8> {
+    let mut merged: Vec<u8> = [data_section_len.to_le_bytes().to_vec(), data_section].concat();
     let mut label_map = HashMap::new();
-    let mut next_pos: u32 = 0;
+    let mut next_pos: u32 = 4 as u32 + data_section_len;
     stmts.iter().for_each(|stmt| {
         let Stmt2::Func(label, _, opcodes) = stmt;
         label_map.insert(label, next_pos);
@@ -90,11 +90,13 @@ fn op_to_bytes(op: &Op2) -> Vec<u8> {
         Op2::FreeRgn => vec![13],
         Op2::Deref(size) => [vec![14], size.to_le_bytes().to_vec()].concat(),
         Op2::NewArr(size) => [vec![15], size.to_le_bytes().to_vec()].concat(),
-        Op2::ArrInit(size) => [vec![16], size.to_le_bytes().to_vec()].concat(),
+        Op2::ArrMut(size) => [vec![16], size.to_le_bytes().to_vec()].concat(),
         Op2::ArrProj(size) => [vec![17], size.to_le_bytes().to_vec()].concat(),
         Op2::AddI32 => vec![18],
         Op2::MulI32 => vec![19],
         Op2::DivI32 => vec![20],
         Op2::CallNZ => vec![21],
+        Op2::Data(size) => [vec![22], size.to_le_bytes().to_vec()].concat(),
+        Op2::DataIndex(size) => [vec![23], size.to_le_bytes().to_vec()].concat(),
     }
 }

@@ -48,12 +48,13 @@ pub enum Op1 {
     Ptr,
     Deref,
     Arr,
-    ArrInit,
+    ArrMut,
     ArrProj,
     AddI32,
     MulI32,
     DivI32,
     CallNZ,
+    Data(u32),
 }
 
 /// The type of unverified ops.
@@ -76,12 +77,14 @@ pub enum Op2 {
     FreeRgn,
     Deref(usize),
     NewArr(usize),
-    ArrInit(usize),
+    ArrMut(usize),
     ArrProj(usize),
     AddI32,
     MulI32,
     DivI32,
     CallNZ,
+    Data(usize),
+    DataIndex(usize),
 }
 
 #[derive(Debug)]
@@ -220,5 +223,8 @@ pub enum Error {
     UnknownGlobalFunc(Pos, Op1, Label),
     UnexpectedEOF,
     TypeErrorArrayExpected(Pos, Op1, Type),
-    ReadOnlyRegionError(Pos, Op1, RgnId)
+    ReadOnlyRegionError(Pos, Op1, RgnId),
+    DataSectionLoadOutOfBounds(Pos, Op1, usize, usize),
+    InvalidDataSectionType(Pos, Op1, Type),
+    CannotMutateDataSection(Pos, Op1),
 }
