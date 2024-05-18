@@ -27,14 +27,19 @@ fn lex(bytes: &ByteStream) -> Result<(usize, Vec<u8>, LexedOpcodes, u32), Error>
     // skip past whatever bytes are in the data section
     let mut data_section = Vec::with_capacity(data_section_len);
     for _ in 0..data_section_len {
-        data_section.push(*(bytes_iter.next().ok_or_else(|| {dbg!(data_section_len); Error::UnexpectedEOF})?));
+        data_section.push(
+            *(bytes_iter.next().ok_or_else(|| {
+                dbg!(data_section_len);
+                Error::UnexpectedEOF
+            })?),
+        );
     }
     let mut a = [0, 0, 0, 0];
     for i in 0..4 {
         match bytes_iter.next() {
             None => {
                 dbg!("c");
-                return Err(Error::UnexpectedEOF)
+                return Err(Error::UnexpectedEOF);
             }
             Some(b) => {
                 a[i] = *b;

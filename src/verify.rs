@@ -80,7 +80,10 @@ pub fn type_pass(stmt: &ForwardDec, mut fresh_id: u32) -> Result<(Label, Type, u
             Op1::Size(s) => compile_time_stack.push(CTStackVal::Size((*s).try_into().unwrap())),
             Op1::Ptr => handle_ptr(pos, op, &mut compile_time_stack)?,
             Op1::Arr => handle_arr(pos, op, &mut compile_time_stack)?,
-            Op1::DataSec => compile_time_stack.push(CTStackVal::Region(Region {unique: false, id: DataSection})),
+            Op1::DataSec => compile_time_stack.push(CTStackVal::Region(Region {
+                unique: false,
+                id: DataSection,
+            })),
             Op1::U8 => compile_time_stack.push(CTStackVal::Type(Type::U8)),
             op => return Err(Error::ForwardDeclRuntimeOp(*op)),
         }
@@ -113,7 +116,10 @@ pub fn definition_pass(
     let mut verified_ops: Vec<Op2> = vec![];
 
     // The list of region variables the function is quantified (polymorphic) over.
-    let mut rgn_vars: Vec<Region> = vec![Region{unique: false, id: DataSection}];
+    let mut rgn_vars: Vec<Region> = vec![Region {
+        unique: false,
+        id: DataSection,
+    }];
     for ctval in &compile_time_stack {
         if let CTStackVal::Region(r) = ctval {
             rgn_vars.push(r.clone());
@@ -684,7 +690,13 @@ pub fn definition_pass(
                                     data_section_len,
                                 ));
                             }
-                            stack_type.push(Type::Ptr(Box::new(t), Region{unique: false, id: DataSection}));
+                            stack_type.push(Type::Ptr(
+                                Box::new(t),
+                                Region {
+                                    unique: false,
+                                    id: DataSection,
+                                },
+                            ));
                             verified_ops.push(Op2::Data(loc));
                         } else {
                             return Err(Error::InvalidDataSectionType(pos, *op, t.clone()));
@@ -694,7 +706,10 @@ pub fn definition_pass(
                     None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
                 },
                 Op1::DataSec => {
-                    compile_time_stack.push(CTStackVal::Region(Region{unique: false, id: DataSection}));
+                    compile_time_stack.push(CTStackVal::Region(Region {
+                        unique: false,
+                        id: DataSection,
+                    }));
                 }
                 Op1::U8 => {
                     compile_time_stack.push(CTStackVal::Type(Type::U8));
@@ -714,7 +729,9 @@ fn valid_data_section_type(t: &Type) -> bool {
     match t {
         Type::I32 => true,
         Type::Array(_, r) if r.id == DataSection => true,
-        Type::Tuple(components) if components.iter().all(|(_, t)| valid_data_section_type(t)) => true,
+        Type::Tuple(components) if components.iter().all(|(_, t)| valid_data_section_type(t)) => {
+            true
+        }
         _ => false,
     }
 }

@@ -110,7 +110,7 @@ pub enum Stmt2 {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RgnId {
     Var(Id),
-    DataSection
+    DataSection,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
