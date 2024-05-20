@@ -127,7 +127,7 @@ pub fn definition_pass(
     }
 
     // The variable tracking the current byte position, for nice error reporting.
-    let mut pos = *label;
+    let mut pos = *label * 10000; // very broken rn, but this hack keeps it a little useful. Think ordinal arithmetic.
 
     let mut next_region_is_unique = false;
 
@@ -162,13 +162,7 @@ pub fn definition_pass(
                     &mut compile_time_stack,
                     &mut quantification_stack,
                 )?,
-                Op1::End => handle_rgn(
-                    &mut next_region_is_unique,
-                    label,
-                    &mut fresh_id,
-                    &mut compile_time_stack,
-                    &mut quantification_stack,
-                )?,
+                Op1::End => handle_end(pos, op, &mut compile_time_stack, &mut quantification_stack)?,
                 Op1::App => match compile_time_stack.pop() {
                     Some(CTStackVal::Type(t_arg)) => match stack_type.pop() {
                         Some(Type::Forall(id, s, t)) => {
@@ -776,6 +770,8 @@ fn handle_call(
                 match stack_type.pop() {
                     Some(t) => arg_ts_present.push(t.clone()),
                     None => {
+                        dbg!(&arg_ts_needed);
+                        dbg!(&arg_ts_present);
                         return Err(Error::TypeErrorNotEnoughRuntimeArgs(
                             pos,
                             arg_ts_needed.len(),
@@ -854,6 +850,7 @@ fn handle_tuple(
     op: &Op1,
     compile_time_stack: &mut Vec<CTStackVal>,
 ) -> Result<(), Error> {
+    dbg!(&compile_time_stack);
     let mut ts = vec![];
     for _ in 0..*n {
         match compile_time_stack.pop() {
@@ -932,9 +929,9 @@ fn handle_end(
     compile_time_stack: &mut Vec<CTStackVal>,
     quantification_stack: &mut Vec<Quantification>,
 ) -> Result<(), Error> {
-    match quantification_stack.pop() {
-        Some(Quantification::Exist(id, s)) => match compile_time_stack.pop() {
-            Some(CTStackVal::Type(t)) => match compile_time_stack.pop() {
+    match dbg!(quantification_stack.pop()) {
+        Some(Quantification::Exist(id, s)) => match dbg!(compile_time_stack.pop()) {
+            Some(CTStackVal::Type(t)) => match dbg!(compile_time_stack.pop()) {
                 Some(CTStackVal::Type(Type::Var(id2, _))) if id == id2 => {
                     compile_time_stack.push(CTStackVal::Type(Type::Exists(id, s, Box::new(t))));
                     Ok(())
@@ -1009,6 +1006,10 @@ fn handle_func(
 }
 
 fn handle_ctget(pos: u32, i: &u8, compile_time_stack: &mut Vec<CTStackVal>) -> Result<(), Error> {
+    if compile_time_stack.len() - 1 < *i as usize {
+        dbg!(&compile_time_stack);
+        return Err(Error::TypeErrorEmptyCTStack(pos, Op1::CTGet(*i)));
+    }
     match compile_time_stack.get(compile_time_stack.len() - 1 - (*i) as usize) {
         Some(ctval) => {
             compile_time_stack.push(ctval.clone());

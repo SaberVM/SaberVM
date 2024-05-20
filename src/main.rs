@@ -5,6 +5,8 @@
  */
 
 mod header;
+mod pretty;
+mod error_msgs;
 mod parse;
 mod verify;
 mod vm;
@@ -24,5 +26,8 @@ fn main() {
     // get the bytes from the local bin.svm file (later this will be a CLI arg of course)
     let bytes: header::ByteStream = fs::read("bin.svm").unwrap();
     let res = go(bytes);
-    let _ = dbg!(res);
+    match res {
+        Ok(_) => println!("Success!"),
+        Err(e) => println!("{}", error_msgs::msg(e)),
+    }
 }

@@ -170,13 +170,13 @@ pub enum CTStackVal {
 }
 
 impl CTStackVal {
-    // pub fn kind(&self) -> Kind {
-    //     match self {
-    //         Self::Region(_) => Kind::Region,
-    //         Self::Type(_) => Kind::Type,
-    //         Self::Size(_) => Kind::Size,
-    //     }
-    // }
+    pub fn kind(&self) -> Kind {
+        match self {
+            Self::Region(_) => Kind::Region,
+            Self::Type(_) => Kind::Type,
+            Self::Size(_) => Kind::Size,
+        }
+    }
 }
 
 #[derive(Debug)]

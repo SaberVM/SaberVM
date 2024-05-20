@@ -212,7 +212,10 @@ fn parse_forward_decs(
     for i in 0..n {
         loop {
             match tokens_iter.next() {
-                None => return Err(Error::UnexpectedEOF),
+                None => {
+                    dbg!("a");
+                    return Err(Error::UnexpectedEOF)
+                }
                 Some(Op1::Lced) => break,
                 Some(op) => current_stmt_opcodes.push(*op),
             }
