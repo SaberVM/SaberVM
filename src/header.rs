@@ -57,7 +57,7 @@ pub enum Op1 {
     Data(u32),
     DataSec,
     U8,
-    PrintN,
+    CopyN,
     U8Lit(u8),
     U8ToI32,
 }
@@ -90,7 +90,7 @@ pub enum Op2 {
     CallNZ,
     Data(usize),
     DataIndex(usize),
-    PrintN,
+    CopyN(usize),
     U8Lit(u8),
     AddU8,
     MulU8,

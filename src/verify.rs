@@ -755,18 +755,23 @@ pub fn definition_pass(
                 Op1::U8 => {
                     compile_time_stack.push(CTStackVal::Type(Type::U8));
                 }
-                Op1::PrintN => match stack_type.pop() {
+                Op1::CopyN => match stack_type.pop() {
                     Some(Type::I32) => match stack_type.pop() {
-                        Some(Type::Array(t, r)) => {
-                            if *t != Type::U8 {
-                                return Err(Error::TypeError(pos, *op, Type::U8, *t));
+                        Some(Type::Handle(r)) => match stack_type.pop() {
+                            Some(Type::Array(t, r2)) if r2.id == r.id => {
+                                if *t != Type::U8 {
+                                    return Err(Error::TypeError(pos, *op, Type::U8, *t));
+                                }
+                                if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                                    return Err(Error::RegionAccessError(pos, *op, r));
+                                }
+                                verified_ops.push(Op2::CopyN(t.size()));
                             }
-                            if rgn_vars.iter().all(|r2| r.id != r2.id) {
-                                return Err(Error::RegionAccessError(pos, *op, r));
-                            }
-                            verified_ops.push(Op2::PrintN);
+                            Some(Type::Array(_, r2)) => return Err(Error::RegionError(pos, *op, r, r2)),
+                            Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                         }
-                        Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
+                        Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     }
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),

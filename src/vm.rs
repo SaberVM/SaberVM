@@ -98,7 +98,7 @@ fn op_to_bytes(op: &Op2) -> Vec<u8> {
         Op2::CallNZ => vec![21],
         Op2::Data(size) => [vec![22], size.to_le_bytes().to_vec()].concat(),
         Op2::DataIndex(size) => [vec![23], size.to_le_bytes().to_vec()].concat(),
-        Op2::PrintN => vec![24],
+        Op2::CopyN(size) => [vec![24], size.to_le_bytes().to_vec()].concat(),
         Op2::U8Lit(n) => vec![25, *n],
         Op2::AddU8 => vec![26],
         Op2::MulU8 => vec![27],

@@ -399,28 +399,36 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             break;
         }
         case 24: {
-            dbg("print n characters!\n");
+            dbg("copy n elements!\n");
             pc++;
             POP(i32, n);
+            POP(Region*, r);
             POP(Pointer, ptr);
+            INSTR_PARAM(size_t, elem_size);
+            u32 size;
+            u8 *ref;
             if (ptr.generation == -1) {
                 // -1 generation means data section string
                 size_t rest_of_data_section = instrs + 4 + data_section_size - ptr.reference;
-                u32 size = (u32)n;
+                size = (u32)n * elem_size;
                 if (size > rest_of_data_section) {
                     size = rest_of_data_section;
                 }
-                printf("%.*s", (int)size, ptr.reference);
+                ref = ptr.reference;
             } else {
                 check_ptr(ptr);
                 size_t array_len;
                 memcpy(&array_len, ptr.reference, sizeof(array_len));
-                u32 size = (u32)n;
-                if (size > array_len) {
-                    size = array_len;
+                size = (u32)n * elem_size;
+                if ((u32)n > array_len) {
+                    size = array_len * elem_size;
                 }
-                printf("%.*s", (int)size, ptr.reference + sizeof(array_len));
+                ref = ptr.reference + sizeof(array_len);
             }
+            Pointer ptr2 = alloc_object(r, sizeof(size) + size);
+            memcpy(ptr2.reference, &size, sizeof(size));
+            memcpy(ptr2.reference + sizeof(size), ref, size);
+            PUSH(Pointer, ptr2);
             break;
         }
         case 25: {
