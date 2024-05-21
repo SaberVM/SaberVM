@@ -194,6 +194,10 @@ fn lex(bytes: &ByteStream) -> Result<(usize, Vec<u8>, LexedOpcodes, u32), Error>
                 0x24 => Op1::DataSec,
                 0x25 => Op1::U8,
                 0x26 => Op1::PrintN,
+                0x27 => match bytes_iter.next() {
+                    Some(n) => Op1::U8Lit(*n),
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                }
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }

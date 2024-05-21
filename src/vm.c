@@ -249,7 +249,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         }
         case 11: {
             dbg("halt!\n");
-            POP(i32, status_code);
+            POP(u8, status_code);
             exit(status_code);
             break;
         }
@@ -421,6 +421,22 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
                 }
                 printf("%.*s", (int)size, ptr.reference + sizeof(array_len));
             }
+            break;
+        }
+        case 25: {
+            dbg("u8 literal!\n");
+            pc++;
+            INSTR_PARAM(u8, val);
+            ensure_size(stack, &sp, sizeof(val));
+            PUSH(u8, val);
+            break;
+        }
+        case 26: {
+            dbg("add u8!\n");
+            pc++;
+            POP(u8, a);
+            POP(u8, b);
+            PUSH(u8, a + b);
             break;
         }
         default: {

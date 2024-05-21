@@ -6,6 +6,7 @@
 
 use crate::header::RgnId::DataSection;
 use crate::header::*;
+// use crate::pretty::Pretty;
 use std::collections::HashMap;
 
 pub fn go(
@@ -18,6 +19,7 @@ pub fn go(
     for stmt in types_instrs {
         match type_pass(&stmt, fresh_id) {
             Ok((l, t, new_fresh_id)) => {
+                // println!("Type {} = {}", l, t.pretty());
                 types.insert(l, t);
                 fresh_id = new_fresh_id;
             }
@@ -36,6 +38,16 @@ pub fn go(
         }
         _ => (),
     }
+    // for s in &verified_stmts {
+    //     match s {
+    //         Stmt2::Func(l, _, ops) => {
+    //             println!("Function {}:", l);
+    //             for op in ops {
+    //                 println!("{}", op.pretty());
+    //             }
+    //         }
+    //     }
+    // }
     Ok(verified_stmts)
 }
 
@@ -110,6 +122,10 @@ pub fn definition_pass(
     // The stacks used for this pass algorithm.
     let (mut compile_time_stack, mut stack_type) = setup_verifier(&my_type)?;
     compile_time_stack.reverse();
+    // println!("Stack type:");
+    // for t in &stack_type {
+    //     println!("- {}", t.pretty());
+    // }
     let mut quantification_stack: Vec<Quantification> = vec![];
 
     // The verified bytecode produced by this first pass.
@@ -194,15 +210,14 @@ pub fn definition_pass(
                 Op1::Func(n) => handle_func(n, pos, op, &mut compile_time_stack)?,
                 Op1::CTGet(i) => handle_ctget(pos, i, &mut compile_time_stack)?,
                 Op1::Lced => panic!("Lced should not appear in this context"),
-                Op1::Unpack => match compile_time_stack.pop() {
-                    Some(CTStackVal::Type(Type::Exists(_id, _s, t))) => {
-                        compile_time_stack.push(CTStackVal::Type(*t))
+                Op1::Unpack => match stack_type.pop() {
+                    Some(Type::Exists(_id, _s, t)) => {
+                        stack_type.push(*t);
                     }
-                    Some(CTStackVal::Type(t)) => {
+                    Some(t) => {
                         return Err(Error::TypeErrorExistentialExpected(pos, *op, t))
                     }
-                    Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
-                    None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
                 Op1::Get(i) => {
                     let stack_len = stack_type.len();
@@ -467,7 +482,7 @@ pub fn definition_pass(
                         }
                         verified_ops.push(Op2::Print);
                     }
-                    Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                    Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
                 Op1::Lit(lit) => {
@@ -482,8 +497,8 @@ pub fn definition_pass(
                     verified_ops.push(Op2::GlobalFunc(*label))
                 }
                 Op1::Halt => match stack_type.pop() {
-                    Some(Type::I32) => verified_ops.push(Op2::Halt),
-                    Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                    Some(Type::U8) => verified_ops.push(Op2::Halt),
+                    Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
                 Op1::Pack => match stack_type.pop() {
@@ -626,6 +641,14 @@ pub fn definition_pass(
                         Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     },
+                    Some(Type::U8) => match stack_type.pop() {
+                        Some(Type::U8) => {
+                            stack_type.push(Type::U8);
+                            verified_ops.push(Op2::AddU8);
+                        }
+                        Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    },
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
@@ -727,11 +750,15 @@ pub fn definition_pass(
                             }
                             verified_ops.push(Op2::PrintN);
                         }
-                        Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                        Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     }
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                }
+                Op1::U8Lit(n) => {
+                    stack_type.push(Type::U8);
+                    verified_ops.push(Op2::U8Lit(*n));
                 }
             },
         }
@@ -770,8 +797,6 @@ fn handle_call(
                 match stack_type.pop() {
                     Some(t) => arg_ts_present.push(t.clone()),
                     None => {
-                        dbg!(&arg_ts_needed);
-                        dbg!(&arg_ts_present);
                         return Err(Error::TypeErrorNotEnoughRuntimeArgs(
                             pos,
                             arg_ts_needed.len(),
@@ -850,7 +875,6 @@ fn handle_tuple(
     op: &Op1,
     compile_time_stack: &mut Vec<CTStackVal>,
 ) -> Result<(), Error> {
-    dbg!(&compile_time_stack);
     let mut ts = vec![];
     for _ in 0..*n {
         match compile_time_stack.pop() {
@@ -929,9 +953,9 @@ fn handle_end(
     compile_time_stack: &mut Vec<CTStackVal>,
     quantification_stack: &mut Vec<Quantification>,
 ) -> Result<(), Error> {
-    match dbg!(quantification_stack.pop()) {
-        Some(Quantification::Exist(id, s)) => match dbg!(compile_time_stack.pop()) {
-            Some(CTStackVal::Type(t)) => match dbg!(compile_time_stack.pop()) {
+    match quantification_stack.pop() {
+        Some(Quantification::Exist(id, s)) => match compile_time_stack.pop() {
+            Some(CTStackVal::Type(t)) => match compile_time_stack.pop() {
                 Some(CTStackVal::Type(Type::Var(id2, _))) if id == id2 => {
                     compile_time_stack.push(CTStackVal::Type(Type::Exists(id, s, Box::new(t))));
                     Ok(())
@@ -1007,7 +1031,6 @@ fn handle_func(
 
 fn handle_ctget(pos: u32, i: &u8, compile_time_stack: &mut Vec<CTStackVal>) -> Result<(), Error> {
     if compile_time_stack.len() - 1 < *i as usize {
-        dbg!(&compile_time_stack);
         return Err(Error::TypeErrorEmptyCTStack(pos, Op1::CTGet(*i)));
     }
     match compile_time_stack.get(compile_time_stack.len() - 1 - (*i) as usize) {
@@ -1113,6 +1136,7 @@ pub fn substitute_r(r: &Region, rsubs: &HashMap<RgnId, Region>) -> Region {
 pub fn type_eq(type1: &Type, type2: &Type) -> bool {
     match (type1, type2) {
         (Type::I32, Type::I32) => true,
+        (Type::U8, Type::U8) => true,
         (Type::Handle(r1), Type::Handle(r2)) => r1 == r2,
         (Type::Tuple(ts1), Type::Tuple(ts2)) => {
             ts1.len() == ts2.len() && {

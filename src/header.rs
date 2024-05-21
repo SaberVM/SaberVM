@@ -58,6 +58,7 @@ pub enum Op1 {
     DataSec,
     U8,
     PrintN,
+    U8Lit(u8),
 }
 
 /// The type of unverified ops.
@@ -88,7 +89,9 @@ pub enum Op2 {
     CallNZ,
     Data(usize),
     DataIndex(usize),
-    PrintN
+    PrintN,
+    U8Lit(u8),
+    AddU8,
 }
 
 #[derive(Debug)]

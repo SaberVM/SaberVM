@@ -52,6 +52,7 @@ impl Pretty for Op1 {
             Op1::DataSec => "data_sec".to_string(),
             Op1::U8 => "u8".to_string(),
             Op1::PrintN => "print_n".to_string(),
+            Op1::U8Lit(n) => "u8_lit ".to_string() + &n.to_string(),
         }
     }
 }
@@ -84,6 +85,8 @@ impl Pretty for Op2 {
             Op2::Data(s) => "data ".to_string() + &s.to_string(),
             Op2::DataIndex(s) => "data_index ".to_string() + &s.to_string(),
             Op2::PrintN => "print_n".to_string(),
+            Op2::U8Lit(n) => "u8_lit ".to_string() + &n.to_string(),
+            Op2::AddU8 => "add_u8".to_string(),
         }
     }
 }
