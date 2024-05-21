@@ -169,9 +169,9 @@ fn lex(bytes: &ByteStream) -> Result<(usize, Vec<u8>, LexedOpcodes, u32), Error>
                 0x1C => Op1::Arr,
                 0x1D => Op1::ArrMut,
                 0x1E => Op1::ArrProj,
-                0x1F => Op1::AddI32,
-                0x20 => Op1::MulI32,
-                0x21 => Op1::DivI32,
+                0x1F => Op1::Add,
+                0x20 => Op1::Mul,
+                0x21 => Op1::Div,
                 0x22 => Op1::CallNZ,
                 0x23 => match bytes_iter.next() {
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),

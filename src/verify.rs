@@ -632,7 +632,7 @@ pub fn definition_pass(
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
-                Op1::AddI32 => match stack_type.pop() {
+                Op1::Add => match stack_type.pop() {
                     Some(Type::I32) => match stack_type.pop() {
                         Some(Type::I32) => {
                             stack_type.push(Type::I32);
@@ -652,7 +652,7 @@ pub fn definition_pass(
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
-                Op1::MulI32 => match stack_type.pop() {
+                Op1::Mul => match stack_type.pop() {
                     Some(Type::I32) => match stack_type.pop() {
                         Some(Type::I32) => {
                             stack_type.push(Type::I32);
@@ -661,16 +661,32 @@ pub fn definition_pass(
                         Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     },
+                    Some(Type::U8) => match stack_type.pop() {
+                        Some(Type::U8) => {
+                            stack_type.push(Type::U8);
+                            verified_ops.push(Op2::MulU8);
+                        }
+                        Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    },
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
-                Op1::DivI32 => match stack_type.pop() {
+                Op1::Div => match stack_type.pop() {
                     Some(Type::I32) => match stack_type.pop() {
                         Some(Type::I32) => {
                             stack_type.push(Type::I32);
                             verified_ops.push(Op2::DivI32);
                         }
                         Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    },
+                    Some(Type::U8) => match stack_type.pop() {
+                        Some(Type::U8) => {
+                            stack_type.push(Type::U8);
+                            verified_ops.push(Op2::DivU8);
+                        }
+                        Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     },
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),

@@ -44,9 +44,9 @@ impl Pretty for Op1 {
             Op1::Arr => "arr".to_string(),
             Op1::ArrMut => "arr_mut".to_string(),
             Op1::ArrProj => "arr_proj".to_string(),
-            Op1::AddI32 => "add_i32".to_string(),
-            Op1::MulI32 => "mul_i32".to_string(),
-            Op1::DivI32 => "div_i32".to_string(),
+            Op1::Add => "add".to_string(),
+            Op1::Mul => "mul".to_string(),
+            Op1::Div => "div".to_string(),
             Op1::CallNZ => "call_nz".to_string(),
             Op1::Data(n) => "data ".to_string() + &n.to_string(),
             Op1::DataSec => "data_sec".to_string(),
@@ -87,6 +87,8 @@ impl Pretty for Op2 {
             Op2::PrintN => "print_n".to_string(),
             Op2::U8Lit(n) => "u8_lit ".to_string() + &n.to_string(),
             Op2::AddU8 => "add_u8".to_string(),
+            Op2::MulU8 => "mul_u8".to_string(),
+            Op2::DivU8 => "div_u8".to_string(),
         }
     }
 }

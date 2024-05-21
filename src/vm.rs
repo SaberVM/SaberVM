@@ -101,5 +101,7 @@ fn op_to_bytes(op: &Op2) -> Vec<u8> {
         Op2::PrintN => vec![24],
         Op2::U8Lit(n) => vec![25, *n],
         Op2::AddU8 => vec![26],
+        Op2::MulU8 => vec![27],
+        Op2::DivU8 => vec![28],
     }
 }

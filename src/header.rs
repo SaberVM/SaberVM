@@ -50,9 +50,9 @@ pub enum Op1 {
     Arr,
     ArrMut,
     ArrProj,
-    AddI32,
-    MulI32,
-    DivI32,
+    Add,
+    Mul,
+    Div,
     CallNZ,
     Data(u32),
     DataSec,
@@ -92,6 +92,8 @@ pub enum Op2 {
     PrintN,
     U8Lit(u8),
     AddU8,
+    MulU8,
+    DivU8,
 }
 
 #[derive(Debug)]

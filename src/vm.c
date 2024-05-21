@@ -439,6 +439,22 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             PUSH(u8, a + b);
             break;
         }
+        case 27: {
+            dbg("multiply u8!\n");
+            pc++;
+            POP(u8, a);
+            POP(u8, b);
+            PUSH(u8, a * b);
+            break;
+        }
+        case 28: {
+            dbg("divide u8!\n");
+            pc++;
+            POP(u8, a);
+            POP(u8, b);
+            PUSH(u8, a / b);
+            break;
+        }
         default: {
             printf("internal error!! Unknown IR op %d, please let the SaberVM team know!!", instrs[pc]);
             exit(1);
