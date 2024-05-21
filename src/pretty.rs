@@ -53,6 +53,7 @@ impl Pretty for Op1 {
             Op1::U8 => "u8".to_string(),
             Op1::PrintN => "print_n".to_string(),
             Op1::U8Lit(n) => "u8_lit ".to_string() + &n.to_string(),
+            Op1::U8ToI32 => "u8_to_i32".to_string(),
         }
     }
 }
@@ -89,6 +90,7 @@ impl Pretty for Op2 {
             Op2::AddU8 => "add_u8".to_string(),
             Op2::MulU8 => "mul_u8".to_string(),
             Op2::DivU8 => "div_u8".to_string(),
+            Op2::U8ToI32 => "u8_to_i32".to_string(),
         }
     }
 }

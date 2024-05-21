@@ -198,6 +198,7 @@ fn lex(bytes: &ByteStream) -> Result<(usize, Vec<u8>, LexedOpcodes, u32), Error>
                     Some(n) => Op1::U8Lit(*n),
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                 }
+                0x28 => Op1::U8ToI32,
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }

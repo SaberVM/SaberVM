@@ -59,6 +59,7 @@ pub enum Op1 {
     U8,
     PrintN,
     U8Lit(u8),
+    U8ToI32,
 }
 
 /// The type of unverified ops.
@@ -94,6 +95,7 @@ pub enum Op2 {
     AddU8,
     MulU8,
     DivU8,
+    U8ToI32,
 }
 
 #[derive(Debug)]

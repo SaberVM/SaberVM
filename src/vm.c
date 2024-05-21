@@ -455,6 +455,13 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             PUSH(u8, a / b);
             break;
         }
+        case 29: {
+            dbg("u8 to i32!\n");
+            pc++;
+            POP(u8, a);
+            PUSH(i32, a);
+            break;
+        }
         default: {
             printf("internal error!! Unknown IR op %d, please let the SaberVM team know!!", instrs[pc]);
             exit(1);

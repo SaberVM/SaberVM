@@ -776,6 +776,14 @@ pub fn definition_pass(
                     stack_type.push(Type::U8);
                     verified_ops.push(Op2::U8Lit(*n));
                 }
+                Op1::U8ToI32 => match stack_type.pop() {
+                    Some(Type::U8) => {
+                        stack_type.push(Type::I32);
+                        verified_ops.push(Op2::U8ToI32);
+                    }
+                    Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
+                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                },
             },
         }
         pos += 1;
