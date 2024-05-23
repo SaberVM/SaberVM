@@ -12,19 +12,23 @@ mod verify;
 mod vm;
 
 use std::fs;
+use std::env;
 
-// const BYTES: [u8; 23] = [0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x09, 0x00, 0x0B, 0x13, 0x07, 0x00, 0x00, 0x00, 0x12, 0x13, 0x00, 0x00, 0x00, 0x00, 0x15];
-
-fn go(bytes: header::ByteStream) -> Result<(), header::Error> {
-    let (data_section_len, data_section, types_instrs, unverified_stmts) = parse::go(&bytes)?;
-    let stmts = verify::go(data_section_len, types_instrs, unverified_stmts)?;
-    vm::go(data_section_len, data_section, stmts);
+fn go(bytes: Vec<header::ByteStream>) -> Result<(), header::Error> {
+    let mut ir_programs = vec![];
+    for prog in bytes {
+        let (data_section, types_instrs, unverified_stmts) = parse::go(&prog)?;
+        let ir_program = verify::go(data_section, types_instrs, unverified_stmts)?;
+        ir_programs.push(ir_program);
+    }
+    vm::go(ir_programs);
     Ok(())
 }
 
 fn main() {
-    // get the bytes from the local bin.svm file (later this will be a CLI arg of course)
-    let bytes: header::ByteStream = fs::read("bin.svm").unwrap();
+    let args = env::args().collect::<Vec<_>>();
+    let bytes: Vec<header::ByteStream> = args.iter().skip(1).map(|filename| fs::read(filename).unwrap()).collect();
+    dbg!(args);
     let res = go(bytes);
     match res {
         Ok(_) => println!("Success!"),

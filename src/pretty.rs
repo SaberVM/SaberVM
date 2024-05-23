@@ -101,18 +101,10 @@ impl Pretty for Op2 {
     }
 }
 
-impl Pretty for ForwardDec {
-    fn pretty(&self) -> String {
-        match self {
-            ForwardDec::Func(pos, ops) => "forward foo".to_string() + &pos.to_string() + " = " + &ops.iter().map(Op1::pretty).collect::<Vec<String>>().join("; "),
-        }
-    }
-}
-
 impl Pretty for Stmt1 {
     fn pretty(&self) -> String {
         match self {
-            Stmt1::Func(pos, ops) => "fn foo".to_string() + &pos.to_string() + " = " + &ops.iter().map(Op1::pretty).collect::<Vec<String>>().join("; "),
+            Stmt1::Func(id, _pos, ops) => "fn foo".to_string() + &id.to_string() + " = " + &ops.iter().map(Op1::pretty).collect::<Vec<String>>().join("; "),
         }
     }
 }

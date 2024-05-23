@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::collections::HashMap;
+
 /// The input type for SaberVM.
 pub type ByteStream = Vec<u8>;
 
@@ -100,22 +102,36 @@ pub enum Op2 {
     U8ToI32,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Visibility {
+    Local,
+    Export(u64, u64),
+    Import(u64, u64),
+}
+
 #[derive(Debug)]
 pub enum ForwardDec {
-    Func(Pos, Vec<Op1>),
+    Func(Pos, Visibility, Vec<Op1>),
 }
 
 /// Statements produced by the parsing pass.
 /// Next they would go through the verification pass.
 #[derive(Debug)]
 pub enum Stmt1 {
-    Func(Pos, Vec<Op1>),
+    Func(u32, Pos, Vec<Op1>),
 }
 
 /// Statements produced by the verification pass.
 #[derive(Debug)]
 pub enum Stmt2 {
     Func(Pos, Type, Vec<Op2>),
+}
+
+pub struct IRProgram {
+    pub data_section: Vec<u8>,
+    pub imports: HashMap<u32, (u64, u64)>,
+    pub exports: HashMap<(u64, u64), u32>,
+    pub funcs: Vec<Stmt2>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

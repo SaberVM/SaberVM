@@ -11,7 +11,7 @@ use crate::header::*;
 type LexedOpcodes = Vec<Op1>;
 
 /// Lex bytes into (possibly parameterized) intructions.
-fn lex(bytes: &ByteStream) -> Result<(usize, Vec<u8>, LexedOpcodes, u32), Error> {
+fn lex(bytes: &ByteStream) -> Result<(Vec<u8>, LexedOpcodes, u32), Error> {
     let mut bytes_iter = bytes.iter();
     let mut lexed_opcodes = vec![];
     let mut data_section_len_vec: [u8; 4] = [0, 0, 0, 0];
@@ -177,16 +177,17 @@ fn lex(bytes: &ByteStream) -> Result<(usize, Vec<u8>, LexedOpcodes, u32), Error>
         }
         pos += 1;
     }
-    Ok((data_section_len, data_section, lexed_opcodes, n))
+    Ok((data_section, lexed_opcodes, n))
 }
 
 fn parse_forward_decs(
     tokens: &LexedOpcodes,
     n: u32,
-) -> Result<(Vec<ForwardDec>, std::slice::Iter<'_, Op1>), Error> {
+) -> Result<(Vec<ForwardDec>, std::slice::Iter<'_, Op1>, u32), Error> {
     let mut forward_decs = vec![];
     let mut tokens_iter = tokens.iter();
     let mut current_stmt_opcodes = vec![];
+    let mut pos = 0;
     for i in 0..n {
         loop {
             match tokens_iter.next() {
@@ -194,56 +195,66 @@ fn parse_forward_decs(
                     dbg!("a");
                     return Err(Error::UnexpectedEOF)
                 }
-                Some(Op1::Lced) => break,
-                Some(Op1::Export(_a, _b)) => {
+                Some(Op1::Lced) => {
+                    forward_decs.push(ForwardDec::Func(i, Visibility::Local, current_stmt_opcodes));
+                    break;
+                }
+                Some(Op1::Export(a, b)) => {
                     // exported function means the implementation is in this file,
                     // but other files can refer to it using the 128-bit (non-namespaced) UID that is a and b.
                     // The type has just been forward-declared,
                     // so other files can know it before all of this file is processed.
-                    todo!("do something to mark this as an exported function, then break");
+                    forward_decs.push(ForwardDec::Func(i, Visibility::Export(*a, *b), current_stmt_opcodes));
+                    break;
                 }
-                Some(Op1::Import(_a, _b)) => {
+                Some(Op1::Import(a, b)) => {
                     // imported function means the implementation is in another file,
                     // which exports it using the 128-bit (non-namespaced) UID that is a and b
                     // so this won't be one of the implementations in this file.
                     // However, we now know its type, and we can refer to it with global_func
                     // as if it were at this spot in the list of functions in this file
-                    todo!("do something to mark this as an imported function, then break");
+                    forward_decs.push(ForwardDec::Func(i, Visibility::Import(*a, *b), current_stmt_opcodes));
+                    break;
                 }
                 Some(op) => current_stmt_opcodes.push(*op),
             }
+            pos += 1;
         }
-        forward_decs.push(ForwardDec::Func(i, current_stmt_opcodes));
         current_stmt_opcodes = vec![];
     }
-    Ok((forward_decs, tokens_iter))
+    Ok((forward_decs, tokens_iter, pos))
 }
 
-/// Divide an opcode stream into functions, producing the AST.
-fn parse(mut tokens_iter: std::slice::Iter<'_, Op1>, n: u32) -> Result<Vec<Stmt1>, Error> {
+fn parse(mut tokens_iter: std::slice::Iter<'_, Op1>, forward_decs: &Vec<ForwardDec>, mut pos: u32) -> Result<Vec<Stmt1>, Error> {
     let mut parsed_stmts = vec![];
     let mut current_stmt_opcodes = vec![];
-    for i in 0..n {
-        loop {
-            match tokens_iter.next() {
-                None => break,
-                Some(Op1::Call) => {
-                    current_stmt_opcodes.push(Op1::Call);
-                    break;
+    for decl in forward_decs {
+        match decl {
+            ForwardDec::Func(i, Visibility::Local | Visibility::Export(_, _), _) => {
+                loop {
+                    match tokens_iter.next() {
+                        None => break,
+                        Some(Op1::Call) => {
+                            current_stmt_opcodes.push(Op1::Call);
+                            break;
+                        }
+                        Some(Op1::CallNZ) => {
+                            current_stmt_opcodes.push(Op1::CallNZ);
+                            break;
+                        }
+                        Some(Op1::Halt) => {
+                            current_stmt_opcodes.push(Op1::Halt);
+                            break;
+                        }
+                        Some(op) => current_stmt_opcodes.push(*op),
+                    }
+                    pos += 1;
                 }
-                Some(Op1::CallNZ) => {
-                    current_stmt_opcodes.push(Op1::CallNZ);
-                    break;
-                }
-                Some(Op1::Halt) => {
-                    current_stmt_opcodes.push(Op1::Halt);
-                    break;
-                }
-                Some(op) => current_stmt_opcodes.push(*op),
+                parsed_stmts.push(Stmt1::Func(*i, pos, current_stmt_opcodes));
+                current_stmt_opcodes = vec![];
             }
+            ForwardDec::Func(_, Visibility::Import(_, _), _) => {}
         }
-        parsed_stmts.push(Stmt1::Func(i, current_stmt_opcodes));
-        current_stmt_opcodes = vec![];
     }
     if current_stmt_opcodes.len() > 0 {
         dbg!(current_stmt_opcodes);
@@ -253,10 +264,10 @@ fn parse(mut tokens_iter: std::slice::Iter<'_, Op1>, n: u32) -> Result<Vec<Stmt1
 }
 
 /// Lex a stream of bytes, maybe return an error, otherwise parse.
-pub fn go(istream: &ByteStream) -> Result<(usize, Vec<u8>, Vec<ForwardDec>, Vec<Stmt1>), Error> {
+pub fn go(istream: &ByteStream) -> Result<(Vec<u8>, Vec<ForwardDec>, Vec<Stmt1>), Error> {
     // this is two-pass currently (lex and parse); it would be straightforward to fuse these passes.
-    let (data_decs, data_section, tokens, n) = lex(istream)?;
-    let (forward_decs, rest) = parse_forward_decs(&tokens, n)?;
-    let stmts = parse(rest, n)?;
-    Ok((data_decs, data_section, forward_decs, stmts))
+    let (data_section, tokens, n) = lex(istream)?;
+    let (forward_decs, rest, pos) = parse_forward_decs(&tokens, n)?;
+    let stmts = parse(rest, &forward_decs, pos)?;
+    Ok((data_section, forward_decs, stmts))
 }

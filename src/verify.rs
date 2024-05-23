@@ -10,17 +10,28 @@ use crate::header::*;
 use std::collections::HashMap;
 
 pub fn go(
-    data_section_len: usize,
+    data_section: Vec<u8>,
     types_instrs: Vec<ForwardDec>,
     unverified_stmts: Vec<Stmt1>,
-) -> Result<Vec<Stmt2>, Error> {
+) -> Result<IRProgram, Error> {
     let mut types = HashMap::new();
     let mut fresh_id = 0;
+    let mut imports = HashMap::new();
+    let mut exports = HashMap::new();
     for stmt in types_instrs {
         match type_pass(&stmt, fresh_id) {
-            Ok((l, t, new_fresh_id)) => {
+            Ok((l, vis, t, new_fresh_id)) => {
                 // println!("Type {} = {}", l, t.pretty());
                 types.insert(l, t);
+                match vis {
+                    Visibility::Import(a, b) => {
+                        imports.insert(l, (a, b));
+                    }
+                    Visibility::Export(a, b) => {
+                        exports.insert((a, b), l);
+                    }
+                    Visibility::Local => {}
+                }
                 fresh_id = new_fresh_id;
             }
             Err(e) => return Err(e),
@@ -28,7 +39,7 @@ pub fn go(
     }
     let verified_stmts: Vec<Stmt2> = unverified_stmts
         .iter()
-        .map(|stmt| definition_pass(data_section_len, stmt, &types, fresh_id))
+        .map(|stmt| definition_pass(data_section.len(), stmt, &types, fresh_id))
         .collect::<Result<Vec<_>, Error>>()?;
     match verified_stmts.get(0) {
         Some(Stmt2::Func(_, Type::Func(param_ts), _)) => {
@@ -38,21 +49,14 @@ pub fn go(
         }
         _ => (),
     }
-    // for s in &verified_stmts {
-    //     match s {
-    //         Stmt2::Func(l, _, ops) => {
-    //             println!("Function {}:", l);
-    //             for op in ops {
-    //                 println!("{}", op.pretty());
-    //             }
-    //         }
-    //     }
-    // }
-    Ok(verified_stmts)
+    Ok(IRProgram { data_section, imports, exports, funcs: verified_stmts })
 }
 
-pub fn type_pass(stmt: &ForwardDec, mut fresh_id: u32) -> Result<(Label, Type, u32), Error> {
-    let ForwardDec::Func(label, ops) = stmt;
+pub fn type_pass(
+    stmt: &ForwardDec,
+    mut fresh_id: u32,
+) -> Result<(Label, Visibility, Type, u32), Error> {
+    let ForwardDec::Func(label, visibility, ops) = stmt;
     let mut next_region_is_unique = false;
     let mut compile_time_stack: Vec<CTStackVal> = vec![];
     let mut quantification_stack: Vec<Quantification> = vec![];
@@ -102,7 +106,7 @@ pub fn type_pass(stmt: &ForwardDec, mut fresh_id: u32) -> Result<(Label, Type, u
         pos += 1;
     }
     match &compile_time_stack[..] {
-        [CTStackVal::Type(t)] => Ok((*label, t.clone(), pos)),
+        [CTStackVal::Type(t)] => Ok((*label, *visibility, t.clone(), pos)),
         _ => return Err(Error::ForwardDeclBadStack(compile_time_stack)),
     }
 }
@@ -113,7 +117,8 @@ pub fn definition_pass(
     types: &HashMap<Label, Type>,
     mut fresh_id: u32,
 ) -> Result<Stmt2, Error> {
-    let Stmt1::Func(label, ops) = stmt;
+    let Stmt1::Func(label, pos, ops) = stmt;
+    let mut pos = *pos;
     let mut ops_iter = ops.iter();
 
     let Some(my_type) = types.get(label).cloned() else {
@@ -143,7 +148,6 @@ pub fn definition_pass(
     }
 
     // The variable tracking the current byte position, for nice error reporting.
-    let mut pos = *label * 10000; // very broken rn, but this hack keeps it a little useful. Think ordinal arithmetic.
 
     let mut next_region_is_unique = false;
 
@@ -178,7 +182,9 @@ pub fn definition_pass(
                     &mut compile_time_stack,
                     &mut quantification_stack,
                 )?,
-                Op1::End => handle_end(pos, op, &mut compile_time_stack, &mut quantification_stack)?,
+                Op1::End => {
+                    handle_end(pos, op, &mut compile_time_stack, &mut quantification_stack)?
+                }
                 Op1::App => match compile_time_stack.pop() {
                     Some(CTStackVal::Type(t_arg)) => match stack_type.pop() {
                         Some(Type::Forall(id, s, t)) => {
@@ -216,9 +222,7 @@ pub fn definition_pass(
                     Some(Type::Exists(_id, _s, t)) => {
                         stack_type.push(*t);
                     }
-                    Some(t) => {
-                        return Err(Error::TypeErrorExistentialExpected(pos, *op, t))
-                    }
+                    Some(t) => return Err(Error::TypeErrorExistentialExpected(pos, *op, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
                 Op1::Get(i) => {
@@ -773,16 +777,18 @@ pub fn definition_pass(
                                 verified_ops.push(Op2::CopyN(t.size()));
                                 stack_type.push(Type::Array(t, r));
                             }
-                            Some(Type::Array(t2, _)) => return Err(Error::TypeError(pos, *op, *t, *t2)),
+                            Some(Type::Array(t2, _)) => {
+                                return Err(Error::TypeError(pos, *op, *t, *t2))
+                            }
                             Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
                             None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                        }
+                        },
                         Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    }
+                    },
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                }
+                },
                 Op1::U8Lit(n) => {
                     stack_type.push(Type::U8);
                     verified_ops.push(Op2::U8Lit(*n));

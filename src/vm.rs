@@ -13,36 +13,73 @@ extern "C" {
     fn vm_function(bytes: *mut u8, len: usize) -> u8;
 }
 
-pub fn go(data_section_len: usize, data_section: Vec<u8>, stmts: Vec<Stmt2>) {
-    let mut code = merge_stmts(data_section_len as u32, data_section, stmts);
-    let len = code.len();
-    dbg!(unsafe { vm_function(code.as_mut_ptr(), len) });
-}
-
-fn merge_stmts(data_section_len: u32, data_section: Vec<u8>, stmts: Vec<Stmt2>) -> Vec<u8> {
-    let mut merged: Vec<u8> = [data_section_len.to_le_bytes().to_vec(), data_section].concat();
-    let mut label_map = HashMap::new();
-    let mut next_pos: u32 = 4 as u32 + data_section_len;
-    stmts.iter().for_each(|stmt| {
-        let Stmt2::Func(label, _, opcodes) = stmt;
-        label_map.insert(label, next_pos);
-        let mut size = 0;
-        for op in opcodes {
-            size += op_to_bytes(op).len();
+pub fn go(ir_programs: Vec<IRProgram>) {
+    let code_size = 4 + ir_programs.iter().map(program_size).sum::<usize>();
+    let mut code = Vec::with_capacity(code_size);
+    let mut import_map = HashMap::new();
+    let mut prog_id = 0;
+    for prog in &ir_programs {
+        for (k,v) in &prog.exports {
+            import_map.insert(*k, (prog_id, *v));
         }
-        next_pos += size as u32;
-    });
-    for Stmt2::Func(_, _, opcodes) in &stmts {
-        for op in opcodes {
-            match op {
-                Op2::GlobalFunc(label) => merged.extend(op_to_bytes(&Op2::GlobalFunc(
-                    *label_map.get(label).unwrap(),
-                ))),
-                _ => merged.extend(op_to_bytes(op)),
+        prog_id += 1;
+    }
+    let mut data_sec_positions = HashMap::new();
+    code.extend(vec![0, 0, 0, 0]);
+    let mut pos: u32 = 4;
+    prog_id = 0;
+    for prog in &ir_programs {
+        data_sec_positions.insert(prog_id, pos - 4);
+        let data_section_len = prog.data_section.len();
+        code.extend(prog.data_section.iter());
+        pos += data_section_len as u32;
+        prog_id += 1;
+    }
+    code[0..4].copy_from_slice(&(pos - 4).to_le_bytes());
+    let mut func_positions = HashMap::new();
+    let mut pos2 = pos;
+    prog_id = 0;
+    for prog in &ir_programs {
+        for Stmt2::Func(l, _, ops) in &prog.funcs {
+            func_positions.insert((prog_id, *l), pos2);
+            pos2 += ops.iter().map(op_len).sum::<usize>() as u32;
+        }
+        prog_id += 1;
+    }
+    assert!(pos2 == code_size as u32);
+    assert!(pos < pos2);
+    prog_id = 0;
+    for prog in &ir_programs {
+        let mut label_map = HashMap::new();
+        let mut pos2 = pos;
+        for Stmt2::Func(label, _, ops) in &prog.funcs {
+            label_map.insert(*label, pos2);
+            pos2 += ops.iter().map(op_len).sum::<usize>() as u32;
+        }
+        for Stmt2::Func(_, _, ops) in &prog.funcs {
+            for op in ops {
+                match op {
+                    Op2::GlobalFunc(label) => {
+                        let func_pos = match label_map.get(label) {
+                            Some(pos) => *pos,
+                            None => {
+                                let func_id = import_map.get(prog.imports.get(label).unwrap()).unwrap();
+                                *func_positions.get(func_id).unwrap()
+                            },
+                        };
+                        code.extend(op_to_bytes(&Op2::GlobalFunc(func_pos as u32)));
+                    }
+                    Op2::Data(data_pos) => {
+                        let data_sec_pos = data_sec_positions.get(&prog_id).unwrap();
+                        code.extend(op_to_bytes(&Op2::Data(*data_sec_pos as usize + *data_pos)));
+                    }
+                    _ => code.extend(op_to_bytes(op)),
+                }
             }
         }
+        prog_id += 1;
     }
-    merged
+    dbg!(unsafe { vm_function(code.as_mut_ptr(), code.len()) });
 }
 
 fn op_to_bytes(op: &Op2) -> Vec<u8> {
@@ -105,4 +142,48 @@ fn op_to_bytes(op: &Op2) -> Vec<u8> {
         Op2::DivU8 => vec![28],
         Op2::U8ToI32 => vec![29],
     }
+}
+
+
+fn op_len(op: &Op2) -> usize {
+    match op {
+        Op2::Get(_, _) => 1 + 8 + 8,
+        Op2::Init(_, _, _) => 1 + 8 + 8 + 8,
+        Op2::InitIP(_, _) => 1 + 8 + 8,
+        Op2::Malloc(_) => 1 + 8,
+        Op2::Alloca(_) => 1 + 8,
+        Op2::Proj(_, _, _) => 1 + 8 + 8 + 8,
+        Op2::ProjIP(_, _) => 1 + 8 + 8,
+        Op2::Call => 1,
+        Op2::Print => 1,
+        Op2::Lit(_) => 1 + 4,
+        Op2::GlobalFunc(_) => 1 + 4,
+        Op2::Halt => 1,
+        Op2::NewRgn(_) => 1 + 8,
+        Op2::FreeRgn => 1,
+        Op2::Deref(_) => 1 + 8,
+        Op2::NewArr(_) => 1 + 8,
+        Op2::ArrMut(_) => 1 + 8,
+        Op2::ArrProj(_) => 1 + 8,
+        Op2::AddI32 => 1,
+        Op2::MulI32 => 1,
+        Op2::DivI32 => 1,
+        Op2::CallNZ => 1,
+        Op2::Data(_) => 1 + 8,
+        Op2::DataIndex(_) => 1 + 8,
+        Op2::CopyN(_) => 1 + 8,
+        Op2::U8Lit(_) => 1 + 1,
+        Op2::AddU8 => 1,
+        Op2::MulU8 => 1,
+        Op2::DivU8 => 1,
+        Op2::U8ToI32 => 1,
+    }
+}
+
+fn program_size(prog: &IRProgram) -> usize {
+    let mut out = prog.data_section.len();
+    for Stmt2::Func(_, _, ops) in &prog.funcs {
+        out += ops.iter().map(op_len).sum::<usize>();
+    }
+    out
 }
