@@ -54,8 +54,14 @@ impl Pretty for Op1 {
             Op1::CopyN => "copy_n".to_string(),
             Op1::U8Lit(n) => "u8_lit ".to_string() + &n.to_string(),
             Op1::U8ToI32 => "u8_to_i32".to_string(),
+            Op1::Import(a, b) => "import ".to_string() + &int_pair_to_str(a, b),
+            Op1::Export(a, b) => "export ".to_string() + &int_pair_to_str(a, b),
         }
     }
+}
+
+fn int_pair_to_str(a: &u64, b: &u64) -> String {
+    return std::str::from_utf8(&a.to_le_bytes()).unwrap().to_owned() + &std::str::from_utf8(&b.to_le_bytes()).unwrap();
 }
 
 impl Pretty for Op2 {

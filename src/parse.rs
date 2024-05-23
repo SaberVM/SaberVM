@@ -89,80 +89,36 @@ fn lex(bytes: &ByteStream) -> Result<(usize, Vec<u8>, LexedOpcodes, u32), Error>
                 },
                 0x11 => Op1::Call,
                 0x12 => Op1::Print,
-                0x13 => match bytes_iter.next() {
-                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n1) => match bytes_iter.next() {
-                        None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                        Some(n2) => match bytes_iter.next() {
-                            None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                            Some(n3) => match bytes_iter.next() {
-                                None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                                Some(n4) => Op1::Lit(
-                                    ((*n4 as u32) << 24
-                                        | (*n3 as u32) << 16
-                                        | (*n2 as u32) << 8
-                                        | (*n1 as u32)) as i32,
-                                ),
-                            },
-                        },
-                    },
-                },
-                0x14 => match bytes_iter.next() {
-                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n1) => match bytes_iter.next() {
-                        None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                        Some(n2) => match bytes_iter.next() {
-                            None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                            Some(n3) => match bytes_iter.next() {
-                                None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                                Some(n4) => Op1::GlobalFunc(
-                                    (*n4 as u32) << 24
-                                        | (*n3 as u32) << 16
-                                        | (*n2 as u32) << 8
-                                        | (*n1 as u32),
-                                ),
-                            },
-                        },
-                    },
-                },
+                0x13 => {
+                    let mut n = [0u8, 0, 0, 0];
+                    for i in 0..4 {
+                        n[i] = *bytes_iter.next().ok_or(Error::SyntaxErrorParamNeeded(pos, *byte))?;
+                    }
+                    Op1::Lit(i32::from_le_bytes(n))
+                }
+                0x14 => {
+                    let mut n = [0u8, 0, 0, 0];
+                    for i in 0..4 {
+                        n[i] = *bytes_iter.next().ok_or(Error::SyntaxErrorParamNeeded(pos, *byte))?;
+                    }
+                    Op1::GlobalFunc(u32::from_le_bytes(n))
+                }
                 0x15 => Op1::Halt,
                 0x16 => Op1::Pack,
-                0x17 => match bytes_iter.next() {
-                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n1) => match bytes_iter.next() {
-                        None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                        Some(n2) => match bytes_iter.next() {
-                            None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                            Some(n3) => match bytes_iter.next() {
-                                None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                                Some(n4) => Op1::Size(
-                                    (*n4 as u32) << 24
-                                        | (*n3 as u32) << 16
-                                        | (*n2 as u32) << 8
-                                        | (*n1 as u32),
-                                ),
-                            },
-                        },
-                    },
-                },
-                0x18 => match bytes_iter.next() {
-                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n1) => match bytes_iter.next() {
-                        None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                        Some(n2) => match bytes_iter.next() {
-                            None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                            Some(n3) => match bytes_iter.next() {
-                                None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                                Some(n4) => Op1::NewRgn(
-                                    (*n4 as u32) << 24
-                                        | (*n3 as u32) << 16
-                                        | (*n2 as u32) << 8
-                                        | (*n1 as u32),
-                                ),
-                            },
-                        },
-                    },
-                },
+                0x17 => {
+                    let mut n = [0u8, 0, 0, 0];
+                    for i in 0..4 {
+                        n[i] = *bytes_iter.next().ok_or(Error::SyntaxErrorParamNeeded(pos, *byte))?;
+                    }
+                    Op1::Size(u32::from_le_bytes(n))
+                }
+                0x18 => {
+                    let mut n = [0u8, 0, 0, 0];
+                    for i in 0..4 {
+                        n[i] = *bytes_iter.next().ok_or(Error::SyntaxErrorParamNeeded(pos, *byte))?;
+                    }
+                    Op1::NewRgn(u32::from_le_bytes(n))
+                }
                 0x19 => Op1::FreeRgn,
                 0x1A => Op1::Ptr,
                 0x1B => Op1::Deref,
@@ -173,24 +129,13 @@ fn lex(bytes: &ByteStream) -> Result<(usize, Vec<u8>, LexedOpcodes, u32), Error>
                 0x20 => Op1::Mul,
                 0x21 => Op1::Div,
                 0x22 => Op1::CallNZ,
-                0x23 => match bytes_iter.next() {
-                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                    Some(n1) => match bytes_iter.next() {
-                        None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                        Some(n2) => match bytes_iter.next() {
-                            None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                            Some(n3) => match bytes_iter.next() {
-                                None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
-                                Some(n4) => Op1::Data(
-                                    (*n4 as u32) << 24
-                                        | (*n3 as u32) << 16
-                                        | (*n2 as u32) << 8
-                                        | (*n1 as u32),
-                                ),
-                            },
-                        },
-                    },
-                },
+                0x23 => {
+                    let mut n = [0u8, 0, 0, 0];
+                    for i in 0..4 {
+                        n[i] = *bytes_iter.next().ok_or(Error::SyntaxErrorParamNeeded(pos, *byte))?;
+                    }
+                    Op1::Data(u32::from_le_bytes(n))
+                }
                 0x24 => Op1::DataSec,
                 0x25 => Op1::U8,
                 0x26 => Op1::CopyN,
@@ -199,6 +144,34 @@ fn lex(bytes: &ByteStream) -> Result<(usize, Vec<u8>, LexedOpcodes, u32), Error>
                     None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
                 }
                 0x28 => Op1::U8ToI32,
+                0x29 => {
+                    let mut a: [u8; 8] = [0,0,0,0,0,0,0,0];
+                    let mut b: [u8; 8] = [0,0,0,0,0,0,0,0];
+                    for i in 0..8 {
+                        a[i] = *bytes_iter.next().ok_or(Error::SyntaxErrorParamNeeded(pos, *byte))?;
+                    }
+                    for i in 0..8 {
+                        b[i] = *bytes_iter.next().ok_or(Error::SyntaxErrorParamNeeded(pos, *byte))?;
+                    }
+                    Op1::Import(
+                        u64::from_le_bytes(a),
+                        u64::from_le_bytes(b),
+                    )
+                }
+                0x2A => {
+                    let mut a: [u8; 8] = [0,0,0,0,0,0,0,0];
+                    let mut b: [u8; 8] = [0,0,0,0,0,0,0,0];
+                    for i in 0..8 {
+                        a[i] = *bytes_iter.next().ok_or(Error::SyntaxErrorParamNeeded(pos, *byte))?;
+                    }
+                    for i in 0..8 {
+                        b[i] = *bytes_iter.next().ok_or(Error::SyntaxErrorParamNeeded(pos, *byte))?;
+                    }
+                    Op1::Export(
+                        u64::from_le_bytes(a),
+                        u64::from_le_bytes(b),
+                    )
+                }
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }
@@ -222,6 +195,21 @@ fn parse_forward_decs(
                     return Err(Error::UnexpectedEOF)
                 }
                 Some(Op1::Lced) => break,
+                Some(Op1::Export(_a, _b)) => {
+                    // exported function means the implementation is in this file,
+                    // but other files can refer to it using the 128-bit (non-namespaced) UID that is a and b.
+                    // The type has just been forward-declared,
+                    // so other files can know it before all of this file is processed.
+                    todo!("do something to mark this as an exported function, then break");
+                }
+                Some(Op1::Import(_a, _b)) => {
+                    // imported function means the implementation is in another file,
+                    // which exports it using the 128-bit (non-namespaced) UID that is a and b
+                    // so this won't be one of the implementations in this file.
+                    // However, we now know its type, and we can refer to it with global_func
+                    // as if it were at this spot in the list of functions in this file
+                    todo!("do something to mark this as an imported function, then break");
+                }
                 Some(op) => current_stmt_opcodes.push(*op),
             }
         }

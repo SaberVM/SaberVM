@@ -60,6 +60,8 @@ pub enum Op1 {
     CopyN,
     U8Lit(u8),
     U8ToI32,
+    Export(u64, u64),
+    Import(u64, u64),
 }
 
 /// The type of unverified ops.

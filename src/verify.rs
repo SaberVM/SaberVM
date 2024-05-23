@@ -210,6 +210,8 @@ pub fn definition_pass(
                 Op1::Func(n) => handle_func(n, pos, op, &mut compile_time_stack)?,
                 Op1::CTGet(i) => handle_ctget(pos, i, &mut compile_time_stack)?,
                 Op1::Lced => panic!("Lced should not appear in this context"),
+                Op1::Import(_, _) => panic!("Import should not appear in this context"),
+                Op1::Export(_, _) => panic!("Export should not appear in this context"),
                 Op1::Unpack => match stack_type.pop() {
                     Some(Type::Exists(_id, _s, t)) => {
                         stack_type.push(*t);
