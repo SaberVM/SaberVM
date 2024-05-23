@@ -402,33 +402,38 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             dbg("copy n elements!\n");
             pc++;
             POP(i32, n);
-            POP(Region*, r);
-            POP(Pointer, ptr);
+            POP(Pointer, src_array);
+            POP(Pointer, dest_array);
             INSTR_PARAM(size_t, elem_size);
-            u32 size;
-            u8 *ref;
-            if (ptr.generation == -1) {
+            size_t size;
+            u8 *src_ref;
+            if (src_array.generation == -1) {
                 // -1 generation means data section string
-                size_t rest_of_data_section = instrs + 4 + data_section_size - ptr.reference;
-                size = (u32)n * elem_size;
+                size_t rest_of_data_section = instrs + 4 + data_section_size - src_array.reference;
+                size = (size_t)n * elem_size;
                 if (size > rest_of_data_section) {
                     size = rest_of_data_section;
                 }
-                ref = ptr.reference;
+                src_ref = src_array.reference;
             } else {
-                check_ptr(ptr);
+                check_ptr(src_array);
                 size_t array_len;
-                memcpy(&array_len, ptr.reference, sizeof(array_len));
-                size = (u32)n * elem_size;
-                if ((u32)n > array_len) {
+                memcpy(&array_len, src_array.reference, sizeof(array_len));
+                size = (size_t)n * elem_size;
+                if ((size_t)n > array_len) {
                     size = array_len * elem_size;
                 }
-                ref = ptr.reference + sizeof(array_len);
+                src_ref = src_array.reference + sizeof(array_len);
             }
-            Pointer ptr2 = alloc_object(r, sizeof(size) + size);
-            memcpy(ptr2.reference, &size, sizeof(size));
-            memcpy(ptr2.reference + sizeof(size), ref, size);
-            PUSH(Pointer, ptr2);
+            size_t dest_array_len;
+            memcpy(&dest_array_len, dest_array.reference, sizeof(dest_array_len));
+            if (dest_array_len < n) {
+                printf("Runtime Error! Array index out of bounds during a copy.\n");
+                exit(1);
+            }
+            memcpy(dest_array.reference + sizeof(size), src_ref, size);
+            PUSH(Pointer, dest_array);
+            dbg("%.*s\n", (int)size, dest_array.reference + sizeof(size));
             break;
         }
         case 25: {
