@@ -57,6 +57,7 @@ impl Pretty for Op1 {
             Op1::Import(a, b) => "import ".to_string() + &int_pair_to_str(a, b),
             Op1::Export(a, b) => "export ".to_string() + &int_pair_to_str(a, b),
             Op1::Modulo => "modulo".to_string(),
+            Op1::I32ToU8 => "i32_to_u8".to_string(),
         }
     }
 }
@@ -100,6 +101,7 @@ impl Pretty for Op2 {
             Op2::U8ToI32 => "u8_to_i32".to_string(),
             Op2::ModuloI32 => "modulo_i32".to_string(),
             Op2::ModuloU8 => "modulo_u8".to_string(),
+            Op2::I32ToU8 => "i32_to_u8".to_string(),
         }
     }
 }

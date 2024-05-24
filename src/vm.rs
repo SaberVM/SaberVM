@@ -143,6 +143,7 @@ fn op_to_bytes(op: &Op2) -> Vec<u8> {
         Op2::U8ToI32 => vec![29],
         Op2::ModuloI32 => vec![30],
         Op2::ModuloU8 => vec![31],
+        Op2::I32ToU8 => vec![32],
     }
 }
 
@@ -181,6 +182,7 @@ fn op_len(op: &Op2) -> usize {
         Op2::U8ToI32 => 1,
         Op2::ModuloI32 => 1,
         Op2::ModuloU8 => 1,
+        Op2::I32ToU8 => 1,
     }
 }
 
