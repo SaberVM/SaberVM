@@ -8,7 +8,7 @@
 
 #include "vm.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #if DEBUG
 #define dbg(...) printf(__VA_ARGS__)
 #else
@@ -427,8 +427,11 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             }
             size_t dest_array_len;
             memcpy(&dest_array_len, dest_array.reference, sizeof(dest_array_len));
-            if (dest_array_len < n) {
-                printf("Runtime Error! Array index out of bounds during a copy.\n");
+            if (n < 0) {
+                printf("Runtime Error! Negative size (%d) during a copy.\n", n);
+                exit(1);
+            } else if (dest_array_len < (u32)n) {
+                printf("Runtime Error! Copy (%d) out of bounds for array of size %lu.\n", n, dest_array_len);
                 exit(1);
             }
             memcpy(dest_array.reference + sizeof(size), src_ref, size);

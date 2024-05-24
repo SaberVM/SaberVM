@@ -6,7 +6,6 @@
 
 use crate::header::RgnId::DataSection;
 use crate::header::*;
-// use crate::pretty::Pretty;
 use std::collections::HashMap;
 
 pub fn go(
@@ -21,7 +20,6 @@ pub fn go(
     for stmt in types_instrs {
         match type_pass(&stmt, fresh_id) {
             Ok((l, vis, t, new_fresh_id)) => {
-                // println!("Type {} = {}", l, t.pretty());
                 types.insert(l, t);
                 match vis {
                     Visibility::Import(a, b) => {
@@ -146,8 +144,6 @@ pub fn definition_pass(
             rgn_vars.push(r.clone());
         }
     }
-
-    // The variable tracking the current byte position, for nice error reporting.
 
     let mut next_region_is_unique = false;
 
