@@ -172,6 +172,7 @@ fn lex(bytes: &ByteStream) -> Result<(Vec<u8>, LexedOpcodes, u32), Error> {
                         u64::from_le_bytes(b),
                     )
                 }
+                0x2B => Op1::Modulo,
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }

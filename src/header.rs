@@ -64,6 +64,7 @@ pub enum Op1 {
     U8ToI32,
     Export(u64, u64),
     Import(u64, u64),
+    Modulo
 }
 
 /// The type of unverified ops.
@@ -100,6 +101,8 @@ pub enum Op2 {
     MulU8,
     DivU8,
     U8ToI32,
+    ModuloI32,
+    ModuloU8,
 }
 
 #[derive(Debug, Clone, Copy)]
