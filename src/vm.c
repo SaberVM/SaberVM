@@ -354,7 +354,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             pc++;
             POP(i32, a);
             POP(i32, b);
-            PUSH(i32, a / b);
+            PUSH(i32, b / a);
             break;
         }
         case 21: {
@@ -468,7 +468,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             pc++;
             POP(u8, a);
             POP(u8, b);
-            PUSH(u8, a / b);
+            PUSH(u8, b / a);
             break;
         }
         case 29: {
@@ -483,7 +483,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             pc++;
             POP(i32, a);
             POP(i32, b);
-            PUSH(i32, a % b);
+            PUSH(i32, b % a);
             break;
         }
         case 31: {
@@ -491,7 +491,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             pc++;
             POP(u8, a);
             POP(u8, b);
-            PUSH(u8, a % b);
+            PUSH(u8, b % a);
             break;
         }
         default: {

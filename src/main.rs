@@ -28,7 +28,6 @@ fn go(bytes: Vec<header::ByteStream>) -> Result<(), header::Error> {
 fn main() {
     let args = env::args().collect::<Vec<_>>();
     let bytes: Vec<header::ByteStream> = args.iter().skip(1).map(|filename| fs::read(filename).unwrap()).collect();
-    dbg!(args);
     let res = go(bytes);
     match res {
         Ok(_) => println!("Success!"),
