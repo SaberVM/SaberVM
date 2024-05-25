@@ -8,12 +8,15 @@ use std::collections::HashMap;
 use std::vec;
 
 use crate::header::*;
+use crate::pretty::Pretty;
+use std::fs;
 
 extern "C" {
     fn vm_function(bytes: *mut u8, len: usize) -> u8;
 }
 
 pub fn go(ir_programs: Vec<IRProgram>) {
+    let mut str = String::new();
     let code_size = 4 + ir_programs.iter().map(program_size).sum::<usize>();
     let mut code = Vec::with_capacity(code_size);
     let mut import_map = HashMap::new();
@@ -56,8 +59,10 @@ pub fn go(ir_programs: Vec<IRProgram>) {
             label_map.insert(*label, pos2);
             pos2 += ops.iter().map(op_len).sum::<usize>() as u32;
         }
-        for Stmt2::Func(_, _, ops) in &prog.funcs {
+        for Stmt2::Func(l, t, ops) in &prog.funcs {
+            str += &("function ".to_string() + &l.to_string() + ": " + &t.pretty() + "\n");
             for op in ops {
+                str += &(pos.to_string() + " " + &op.pretty() + "\n");
                 match op {
                     Op2::GlobalFunc(label) => {
                         let func_pos = match label_map.get(label) {
@@ -75,10 +80,12 @@ pub fn go(ir_programs: Vec<IRProgram>) {
                     }
                     _ => code.extend(op_to_bytes(op)),
                 }
+                pos += op_len(op) as u32;
             }
         }
         prog_id += 1;
     }
+    let _ = fs::write("t.txt", str);
     dbg!(unsafe { vm_function(code.as_mut_ptr(), code.len()) });
 }
 

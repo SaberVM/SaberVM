@@ -1,0 +1,260 @@
+function 0: ()->0
+4 new_rgn 4096
+13 global_func 2
+18 call
+function 2: forall r7: Rgn. (handle(r7))->0
+19 get 0 8
+36 malloc 0
+45 get 16 8
+62 malloc 20
+71 get 0 16
+88 global_func 3
+93 init_ip 0 4
+110 get 0 16
+127 get 48 16
+144 init_ip 4 16
+161 get 0 16
+178 get 0 16
+195 proj_ip 0 4
+212 get 4 16
+229 proj_ip 4 16
+246 get 100 8
+263 malloc 0
+272 get 116 8
+289 malloc 20
+298 get 0 16
+315 global_func 11
+320 init_ip 0 4
+337 get 0 16
+354 get 48 16
+371 init_ip 4 16
+388 get 164 8
+405 get 72 16
+422 get 24 16
+439 get 120 4
+456 call
+function 3: forall r7: Rgn. (exists a8: 16byte. ((exists a11: 16byte. ((exists a12: 16byte. ((exists a13: 16byte. ((exists a14: 16byte. ((exists a15: 16byte. ((i32, a15, handle(r7))->0, a15)@r7, i32, a14, handle(r7))->0, a14)@r7, a13, handle(r7))->0, a13)@r7, i32, a12, handle(r7))->0, a12)@r7, a11, handle(r7))->0, a11)@r7, exists a9: 16byte. ((exists a10: 16byte. ((i32, a10, handle(r7))->0, a10)@r7, i32, a9, handle(r7))->0, a9)@r7, a8, handle(r7))->0, a8)@r7, ()@r7, handle(r7))->0
+457 get 32 8
+474 malloc 16
+483 get 0 16
+500 get 32 16
+517 init_ip 0 16
+534 get 64 8
+551 malloc 20
+560 get 0 16
+577 global_func 4
+582 init_ip 0 4
+599 get 0 16
+616 get 48 16
+633 init_ip 4 16
+650 get 0 16
+667 get 0 16
+684 proj_ip 0 4
+701 get 4 16
+718 proj_ip 4 16
+735 get 148 8
+752 malloc 0
+761 get 164 8
+778 malloc 20
+787 get 0 16
+804 global_func 10
+809 init_ip 0 4
+826 get 0 16
+843 get 48 16
+860 init_ip 4 16
+877 get 212 8
+894 get 72 16
+911 get 24 16
+928 get 120 4
+945 call
+function 4: forall r104: Rgn. (exists a113: 16byte. ((exists a114: 16byte. ((i32, a114, handle(r104))->0, a114)@r104, i32, a113, handle(r104))->0, a113)@r104, (exists a105: 16byte. ((exists a108: 16byte. ((exists a109: 16byte. ((exists a110: 16byte. ((exists a111: 16byte. ((exists a112: 16byte. ((i32, a112, handle(r104))->0, a112)@r104, i32, a111, handle(r104))->0, a111)@r104, a110, handle(r104))->0, a110)@r104, i32, a109, handle(r104))->0, a109)@r104, a108, handle(r104))->0, a108)@r104, exists a106: 16byte. ((exists a107: 16byte. ((i32, a107, handle(r104))->0, a107)@r104, i32, a106, handle(r104))->0, a106)@r104, a105, handle(r104))->0, a105)@r104)@r104, handle(r104))->0
+946 get 16 16
+963 proj_ip 0 16
+980 get 0 16
+997 get 0 16
+1014 proj_ip 0 4
+1031 get 4 16
+1048 proj_ip 4 16
+1065 get 84 8
+1082 malloc 0
+1091 get 100 8
+1108 malloc 20
+1117 get 0 16
+1134 global_func 5
+1139 init_ip 0 4
+1156 get 0 16
+1173 get 48 16
+1190 init_ip 4 16
+1207 get 148 8
+1224 get 72 16
+1241 get 140 16
+1258 get 40 16
+1275 get 136 4
+1292 call
+function 5: forall r129: Rgn. (exists a130: 16byte. ((exists a131: 16byte. ((exists a132: 16byte. ((exists a133: 16byte. ((i32, a133, handle(r129))->0, a133)@r129, i32, a132, handle(r129))->0, a132)@r129, a131, handle(r129))->0, a131)@r129, i32, a130, handle(r129))->0, a130)@r129, ()@r129, handle(r129))->0
+1293 get 32 8
+1310 malloc 16
+1319 get 0 16
+1336 get 32 16
+1353 init_ip 0 16
+1370 get 64 8
+1387 malloc 20
+1396 get 0 16
+1413 global_func 6
+1418 init_ip 0 4
+1435 get 0 16
+1452 get 48 16
+1469 init_ip 4 16
+1486 get 0 16
+1503 get 0 16
+1520 proj_ip 0 4
+1537 get 4 16
+1554 proj_ip 4 16
+1571 get 148 8
+1588 get 8 16
+1605 lit 6
+1610 get 44 4
+1627 call
+function 6: forall r60: Rgn. (i32, (exists a61: 16byte. ((exists a62: 16byte. ((exists a63: 16byte. ((exists a64: 16byte. ((i32, a64, handle(r60))->0, a64)@r60, i32, a63, handle(r60))->0, a63)@r60, a62, handle(r60))->0, a62)@r60, i32, a61, handle(r60))->0, a61)@r60)@r60, handle(r60))->0
+1628 get 4 16
+1645 proj_ip 0 16
+1662 get 0 16
+1679 get 0 16
+1696 proj_ip 0 4
+1713 get 4 16
+1730 proj_ip 4 16
+1747 get 72 8
+1764 malloc 0
+1773 get 88 8
+1790 malloc 20
+1799 get 0 16
+1816 global_func 7
+1821 init_ip 0 4
+1838 get 0 16
+1855 get 48 16
+1872 init_ip 4 16
+1889 get 136 8
+1906 get 72 16
+1923 get 140 4
+1940 get 28 16
+1957 get 124 4
+1974 call
+function 7: forall r62: Rgn. (exists a63: 16byte. ((exists a64: 16byte. ((i32, a64, handle(r62))->0, a64)@r62, i32, a63, handle(r62))->0, a63)@r62, ()@r62, handle(r62))->0
+1975 get 32 8
+1992 malloc 16
+2001 get 0 16
+2018 get 32 16
+2035 init_ip 0 16
+2052 get 64 8
+2069 malloc 20
+2078 get 0 16
+2095 global_func 8
+2100 init_ip 0 4
+2117 get 0 16
+2134 get 48 16
+2151 init_ip 4 16
+2168 get 0 16
+2185 get 0 16
+2202 proj_ip 0 4
+2219 get 4 16
+2236 proj_ip 4 16
+2253 get 148 8
+2270 get 8 16
+2287 lit 7
+2292 get 44 4
+2309 call
+function 8: forall r39: Rgn. (i32, (exists a40: 16byte. ((exists a41: 16byte. ((i32, a41, handle(r39))->0, a41)@r39, i32, a40, handle(r39))->0, a40)@r39)@r39, handle(r39))->0
+2310 get 4 16
+2327 proj_ip 0 16
+2344 get 0 16
+2361 get 0 16
+2378 proj_ip 0 4
+2395 get 4 16
+2412 proj_ip 4 16
+2429 get 72 8
+2446 malloc 0
+2455 get 88 8
+2472 malloc 20
+2481 get 0 16
+2498 global_func 9
+2503 init_ip 0 4
+2520 get 0 16
+2537 get 48 16
+2554 init_ip 4 16
+2571 get 136 8
+2588 get 72 16
+2605 get 140 4
+2622 get 28 16
+2639 get 124 4
+2656 call
+function 9: forall r41: Rgn. (i32, ()@r41, handle(r41))->0
+2657 get 4 16
+2674 get 16 4
+2691 get 40 8
+2708 global_func 1
+2713 call
+function 10: forall r18: Rgn. (exists a19: 16byte. ((i32, a19, handle(r18))->0, a19)@r18, i32, ()@r18, handle(r18))->0
+2714 get 0 16
+2731 get 0 16
+2748 proj_ip 0 4
+2765 get 4 16
+2782 proj_ip 4 16
+2799 get 72 8
+2816 get 8 16
+2833 get 76 4
+2850 get 44 4
+2867 call
+function 11: forall r31: Rgn. (exists a34: 16byte. ((exists a35: 16byte. ((exists a36: 16byte. ((exists a37: 16byte. ((exists a38: 16byte. ((i32, a38, handle(r31))->0, a38)@r31, i32, a37, handle(r31))->0, a37)@r31, a36, handle(r31))->0, a36)@r31, i32, a35, handle(r31))->0, a35)@r31, a34, handle(r31))->0, a34)@r31, exists a32: 16byte. ((exists a33: 16byte. ((i32, a33, handle(r31))->0, a33)@r31, i32, a32, handle(r31))->0, a32)@r31, ()@r31, handle(r31))->0
+2868 get 0 16
+2885 get 0 16
+2902 proj_ip 0 4
+2919 get 4 16
+2936 proj_ip 4 16
+2953 get 84 8
+2970 malloc 16
+2979 get 0 16
+2996 get 84 16
+3013 init_ip 0 16
+3030 get 116 8
+3047 malloc 20
+3056 get 0 16
+3073 global_func 12
+3078 init_ip 0 4
+3095 get 0 16
+3112 get 48 16
+3129 init_ip 4 16
+3146 get 164 8
+3163 get 88 16
+3180 get 24 16
+3197 get 136 4
+3214 call
+function 12: forall r101: Rgn. (exists a104: 16byte. ((exists a105: 16byte. ((exists a106: 16byte. ((i32, a106, handle(r101))->0, a106)@r101, i32, a105, handle(r101))->0, a105)@r101, a104, handle(r101))->0, a104)@r101, i32, (exists a102: 16byte. ((exists a103: 16byte. ((i32, a103, handle(r101))->0, a103)@r101, i32, a102, handle(r101))->0, a102)@r101)@r101, handle(r101))->0
+3215 get 20 16
+3232 proj_ip 0 16
+3249 get 16 16
+3266 get 0 16
+3283 proj_ip 0 4
+3300 get 4 16
+3317 proj_ip 4 16
+3334 get 88 8
+3351 get 8 16
+3368 get 60 16
+3385 get 56 4
+3402 call
+function 0: forall r0: Rgn. (handle(r0), i32)->0
+3403 lit 2
+3408 new_arr 1
+3417 get 16 4
+3434 lit 10
+3439 modulo_i32
+3440 lit 48
+3445 add_i32
+3446 i32_to_u8
+3447 lit 0
+3452 arr_mut 1
+3461 u8_lit 10
+3463 lit 1
+3468 arr_mut 1
+3477 print
+3478 u8_lit 0
+3480 halt

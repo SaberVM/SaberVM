@@ -6,6 +6,7 @@
 
 use crate::header::RgnId::DataSection;
 use crate::header::*;
+use crate::pretty::Pretty;
 use std::collections::HashMap;
 
 pub fn go(
@@ -875,6 +876,9 @@ fn handle_call(
                 .zip(arg_ts_needed.iter())
                 .all(|(t1, t2)| type_eq(t1, t2));
             if !types_match {
+                for t in stack_type {
+                    println!("{}", t.pretty());
+                }
                 return Err(Error::TypeErrorCallArgTypesMismatch(
                     pos,
                     arg_ts_needed.to_vec(),
