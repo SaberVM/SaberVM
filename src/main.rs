@@ -10,6 +10,7 @@ mod error_msgs;
 mod parse;
 mod verify;
 mod vm;
+mod aot;
 
 use std::fs;
 use std::env;

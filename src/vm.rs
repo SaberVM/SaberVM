@@ -10,6 +10,7 @@ use std::vec;
 use crate::header::*;
 use crate::pretty::Pretty;
 use std::fs;
+use crate::aot;
 
 extern "C" {
     fn vm_function(bytes: *mut u8, len: usize) -> u8;
@@ -86,6 +87,7 @@ pub fn go(ir_programs: Vec<IRProgram>) {
         prog_id += 1;
     }
     let _ = fs::write("t.txt", str);
+    dbg!(aot::go(&code));
     dbg!(unsafe { vm_function(code.as_mut_ptr(), code.len()) });
 }
 
