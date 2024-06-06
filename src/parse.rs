@@ -174,6 +174,14 @@ fn lex(bytes: &ByteStream) -> Result<(Vec<u8>, LexedOpcodes, u32), Error> {
                 }
                 0x2B => Op1::Modulo,
                 0x2C => Op1::I32ToU8,
+                0x2D => match bytes_iter.next() {
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n) => Op1::Read(*n),
+                },
+                0x2E => match bytes_iter.next() {
+                    None => return Err(Error::SyntaxErrorParamNeeded(pos, *byte)),
+                    Some(n) => Op1::Write(*n),
+                },
                 op => return Err(Error::SyntaxErrorUnknownOp(pos, *op)),
             }),
         }

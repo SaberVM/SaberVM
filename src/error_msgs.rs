@@ -141,5 +141,8 @@ pub fn msg(e: Error) -> String {
         Error::CannotMutateDataSection(pos, op) => {
             format!("Data section mutation error at pos {} for opcode {}: cannot mutate data section", pos, op.pretty())
         },
+        Error::UnknownChannel(pos, op, c) => {
+            format!("Unknown channel {} at pos {} for opcode {}", c, pos, op.pretty())
+        }
     }
 }

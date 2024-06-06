@@ -18,6 +18,7 @@
 #define METADATA_OFFSET (sizeof(u64) + sizeof(u64))
 
 Region *new_region(size_t size) {
+    dbg("region size with metadata: %lu\n", sizeof(size_t) + sizeof(size_t) + sizeof(size_t) + size);
     Region *r = malloc(sizeof(size_t) + sizeof(size_t) + sizeof(size_t) + size); // an extra sizeof(size_t) to be safe re: padding
     r->offset = 0;
     r->capacity = size;
@@ -121,22 +122,88 @@ void ensure_size(struct Stack **stack, u32 *sp, size_t size) {
     }
 }
 
-uint8_t vm_function(u8 instrs[], size_t instrs_len) {
-    for (u32 i = 0; i < instrs_len; i++) {
-        dbg(" %d", instrs[i]);
+Handler scheduler[255];
+u8 scheduler_len = 0;
+
+int post_task(Handler h) {
+    if (scheduler_len == 255) return 0;
+    scheduler[scheduler_len++] = h;
+    return 1;
+}
+
+u8 waiting = 0;
+Handler stdin_handler = {0};
+Region *stdin_rgn = NULL;
+Pointer stdin_str_ptr = {0, NULL};
+Handler stdout_handler = {0};
+Handler stderr_handler = {0};
+
+void handle_stdin() {
+    ssize_t bytes;
+    char buffer[1024];
+    // Read all available input
+    while ((bytes = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0) {
+        Pointer ptr = alloc_object(stdin_rgn, bytes + sizeof(bytes));
+        memcpy(ptr.reference, &bytes, sizeof(bytes));
+        memcpy(ptr.reference + sizeof(bytes), buffer, bytes);
+        Handler h;
+        memcpy(&h, &stdin_handler, sizeof(h));
+        memcpy(h.param, &ptr, sizeof(ptr));
+        h.param_size = sizeof(ptr);
+        if (post_task(h)) {
+            printf("failed to post stdin handler to scheduler\n");
+            exit(1);
+        }
+        waiting &= 0b11111110;
     }
-    dbg("\n");
+    
+}
+
+u8 vm_function(u8 instrs[]) {
+    // for (u32 i = 0; i < instrs_len; i++) {
+    //     dbg(" %d", instrs[i]);
+    // }
+    // dbg("\n");
     u32 data_section_size;
     memcpy(&data_section_size, instrs, sizeof(data_section_size));
+    dbg("data section size: %lu\n", data_section_size);
     u32 pc = sizeof(data_section_size) + data_section_size;
+    dbg("pc: %lu\n", pc);
     u32 sp = 0;
     struct Stack *stack = malloc(sizeof(struct Stack));
+
+    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK | O_ASYNC);
+    fcntl(STDIN_FILENO, __F_SETOWN, getpid());
+    signal(SIGIO, handle_stdin);
+
+    Handler on_start = (Handler){.f=pc};
+    post_task(on_start); // guaranteed to succeed; no failure check here
     while (1) {
-        dbg("pc: %d, sp: %d\n", pc, sp);
-        for (u32 i = 0; i < sp; i++) {
-            dbg(" %d", stack->data[i]);
+        while (scheduler_len > 0) {
+            Handler h = scheduler[--scheduler_len];
+            memcpy(stack->data + sp, &h.param, h.param_size);
+            sp += h.param_size;
+            memcpy(stack->data + sp, &h.env, sizeof(h.env));
+            sp += sizeof(h.env);
+            u8 err = eval(instrs, h.f, sp + h.param_size + sizeof(h.env), data_section_size, stack);
+            if (err) return err;
         }
-        dbg("\n");
+        dbg("waiting: %d\nscheduler_len: %d\n", waiting);
+        while (scheduler_len == 0 && waiting) usleep(10000);
+        if (!waiting && scheduler_len == 0) {
+            return 0;
+        }
+    }
+}
+
+u8 eval(u8 instrs[], u32 pc, u32 sp, u32 data_section_size, struct Stack *stack) {
+    while (1) {
+        // dbg("pc: %d, sp: %d\n", pc, sp);
+        // for (u32 i = 0; i < sp; i++) {
+        //     dbg(" %d", stack->data[i]);
+        // }
+        // dbg("\n");
         switch (instrs[pc]) {
         case 0: {
             dbg("get!\n");
@@ -155,7 +222,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
                 i--;
             }
             if (i == 0) {
-                exit(1);
+                return 1;
             }
             memcpy(stack->data + sp, stack2->data + sp2 - offset - size, size);
             sp += size;
@@ -265,7 +332,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
         case 11: {
             dbg("halt!\n");
             POP(u8, status_code);
-            exit(status_code);
+            return status_code;
             break;
         }
         case 12: {
@@ -322,7 +389,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             memcpy(&array_len, ptr.reference, sizeof(array_len));
             if (n + elem_size > array_len) {
                 printf("Runtime Error! Array index out of bounds during an initialization.\n");
-                exit(1);
+                return 1;
             }
             memcpy(ptr.reference + sizeof(array_len) + n, stack->data + sp - elem_size, elem_size);
             sp -= elem_size + sizeof(ptr);
@@ -341,7 +408,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             memcpy(&array_len, ptr.reference, sizeof(array_len));
             if (n + elem_size > array_len) {
                 printf("Runtime Error! Array index out of bounds during a projection.\n");
-                exit(1);
+                return 1;
             }
             ensure_size(&stack, &sp, elem_size);
             memcpy(stack->data + sp, ptr.reference + sizeof(array_len) + n, elem_size);
@@ -406,7 +473,7 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             POP(Pointer, ptr); // frontend ensures this is a data-section pointer, so we don't need to check it.
             if (n + elem_size > data_section_size) {
                 printf("Runtime Error! Array index out of bounds during a projection from the data section.\n");
-                exit(1);
+                return 1;
             }
             ensure_size(&stack, &sp, elem_size);
             memcpy(stack->data + sp, ptr.reference + n, elem_size);
@@ -444,10 +511,10 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             memcpy(&dest_array_len, dest_array.reference, sizeof(dest_array_len));
             if (n < 0) {
                 printf("Runtime Error! Negative size (%d) during a copy.\n", n);
-                exit(1);
+                return 1;
             } else if (dest_array_len < (u32)n) {
                 printf("Runtime Error! Copy (%d) out of bounds for array of size %lu.\n", n, dest_array_len);
-                exit(1);
+                return 1;
             }
             memcpy(dest_array.reference + sizeof(size), src_ref, size);
             PUSH(Pointer, dest_array);
@@ -516,9 +583,62 @@ uint8_t vm_function(u8 instrs[], size_t instrs_len) {
             PUSH(u8, a);
             break;
         }
+        case 33: {
+            dbg("read!\n");
+            pc++;
+            INSTR_PARAM(u8, c);
+            switch (c) {
+                case 0: {
+                    POP(Region*, r);
+                    POP(Pointer, env);
+                    POP(u32, handler);
+                    stdin_handler.f = handler;
+                    stdin_handler.env = env;
+                    stdin_rgn = r;
+                    waiting |= 0b1;
+                    break;
+                }
+            }
+            break;
+        }
+        case 34: {
+            dbg("write!\n");
+            pc++;
+            INSTR_PARAM(u8, c);
+            switch (c) {
+                case 0: {
+                    POP(Region*, r);
+                    POP(u8, write_mode);
+                    POP(Pointer, env);
+                    POP(u32, handler);
+                    POP(Pointer, str_ptr);
+                    if (write_mode == 0) {
+                        stdout_handler.f = handler;
+                        stdout_handler.env = env;
+                        size_t len;
+                        memcpy(&len, str_ptr.reference, sizeof(len));
+                        printf("%.*s", (int)len, str_ptr.reference + sizeof(len));
+                        post_task(stdout_handler);
+                    } else if (write_mode == 1) {
+                        stderr_handler.f = handler;
+                        stderr_handler.env = env;
+                        size_t len;
+                        memcpy(&len, str_ptr.reference, sizeof(len));
+                        fprintf(stderr, "%.*s", (int)len, str_ptr.reference + sizeof(len));
+                        post_task(stderr_handler);
+                    } else {
+                        printf("Internal SaberVM Error! Unknown write mode %d.\n", write_mode);
+                        exit(1);
+                    }
+                    // waiting |= 0b10;
+                    break;
+                }
+            }
+            break;
+        }
         default: {
             printf("internal error!! Unknown IR op %d, please let the SaberVM team know!!", instrs[pc]);
-            exit(1);
+            return 1;
         }
         }
     }

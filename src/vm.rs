@@ -12,10 +12,10 @@ use crate::pretty::Pretty;
 use std::fs;
 
 extern "C" {
-    fn vm_function(bytes: *mut u8, len: usize) -> u8;
+    fn vm_function(bytes: *mut u8) -> u8;
 }
 
-pub fn go(ir_programs: Vec<IRProgram>) {
+pub fn go(ir_programs: Vec<IRProgram>) -> u8 {
     let mut str = String::new();
     let code_size = 4 + ir_programs.iter().map(program_size).sum::<usize>();
     let mut code = Vec::with_capacity(code_size);
@@ -86,7 +86,7 @@ pub fn go(ir_programs: Vec<IRProgram>) {
         prog_id += 1;
     }
     let _ = fs::write("t.txt", str);
-    dbg!(unsafe { vm_function(code.as_mut_ptr(), code.len()) });
+    unsafe { vm_function(code.as_mut_ptr()) }
 }
 
 fn op_to_bytes(op: &Op2) -> Vec<u8> {
@@ -151,6 +151,8 @@ fn op_to_bytes(op: &Op2) -> Vec<u8> {
         Op2::ModuloI32 => vec![30],
         Op2::ModuloU8 => vec![31],
         Op2::I32ToU8 => vec![32],
+        Op2::Read(c) => vec![33, *c],
+        Op2::Write(c) => vec![34, *c],
     }
 }
 
@@ -190,6 +192,8 @@ fn op_len(op: &Op2) -> usize {
         Op2::ModuloI32 => 1,
         Op2::ModuloU8 => 1,
         Op2::I32ToU8 => 1,
+        Op2::Read(_) => 1 + 1,
+        Op2::Write(_) => 1 + 1,
     }
 }
 

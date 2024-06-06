@@ -48,7 +48,12 @@ pub fn go(
         }
         _ => (),
     }
-    Ok(IRProgram { data_section, imports, exports, funcs: verified_stmts })
+    Ok(IRProgram {
+        data_section,
+        imports,
+        exports,
+        funcs: verified_stmts,
+    })
 }
 
 pub fn type_pass(
@@ -149,6 +154,7 @@ pub fn definition_pass(
     let mut next_region_is_unique = false;
 
     loop {
+        // dbg!(&compile_time_stack.iter().map(|v| v.pretty()).collect::<Vec<_>>());
         match ops_iter.next() {
             None => break,
             Some(op) => match op {
@@ -512,6 +518,15 @@ pub fn definition_pass(
                                 size_of_hidden,
                                 existential_type,
                             ))) => {
+                                // dbg!(&type_of_hidden.pretty());
+                                if size_of_hidden != hidden_type.size() {
+                                    return Err(Error::SizeError(
+                                        pos,
+                                        *op,
+                                        size_of_hidden,
+                                        type_of_hidden.size(),
+                                    ));
+                                }
                                 let unpacked_type = substitute_t(
                                     &existential_type,
                                     &HashMap::from([(id, hidden_type)]),
@@ -523,14 +538,6 @@ pub fn definition_pass(
                                         *op,
                                         unpacked_type,
                                         type_of_hidden,
-                                    ));
-                                }
-                                if size_of_hidden != type_of_hidden.size() {
-                                    return Err(Error::SizeError(
-                                        pos,
-                                        *op,
-                                        size_of_hidden,
-                                        type_of_hidden.size(),
                                     ));
                                 }
                                 stack_type.push(Type::Exists(id, size_of_hidden, existential_type));
@@ -814,7 +821,7 @@ pub fn definition_pass(
                         }
                         Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    }
+                    },
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
@@ -826,6 +833,68 @@ pub fn definition_pass(
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
+                Op1::Read(c) => {
+                    let t = match c {
+                        0 => match stack_type.pop() {
+                            Some(Type::Handle(r)) => Type::Array(Box::new(Type::U8), r),
+                            Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op))
+                        }
+                        _ => return Err(Error::UnknownChannel(pos, *op, *c))
+                    };
+                    match stack_type.pop() {
+                        Some(Type::Exists(a, 16, body)) => {
+                            let body2 = Type::Tuple(vec![
+                                (true, Type::Func(vec![t, Type::Var(a, 16)])),
+                                (true, Type::Var(a, 16)),
+                            ]);
+                            if type_eq(&*body, &body2) {
+                                verified_ops.push(Op2::Read(*c));
+                            } else {
+                                return Err(Error::TypeError(pos, *op, body2, *body))
+                            }
+                        }
+                        Some(t) => return Err(Error::TypeErrorExistentialExpected(pos, *op, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    }
+                }
+                Op1::Write(c) => {
+                    let t = match c {
+                        0 => match stack_type.pop() {
+                            Some(Type::Handle(r)) => Type::Array(Box::new(Type::U8), r),
+                            Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op))
+                        }
+                        _ => return Err(Error::UnknownChannel(pos, *op, *c)),
+                    };
+                    match stack_type.pop() {
+                        Some(Type::U8) => match stack_type.pop() {
+                            Some(Type::Exists(a, 16, body)) => {
+                                let body2 = Type::Tuple(vec![
+                                    (true, Type::Func(vec![Type::Var(a, 16)])),
+                                    (true, Type::Var(a, 16)),
+                                ]);
+                                if type_eq(&*body, &body2) {
+                                    match stack_type.pop() {
+                                        Some(t2) if type_eq(&t, &t2) => {
+                                            verified_ops.push(Op2::Write(*c));
+                                        }
+                                        Some(t2) => return Err(Error::TypeError(pos, *op, t, t2)),
+                                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                                    }
+                                } else {
+                                    return Err(Error::TypeError(pos, *op, body2, *body))
+                                }
+                            }
+                            Some(t) => {
+                                return Err(Error::TypeErrorExistentialExpected(pos, *op, t))
+                            }
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                        },
+                        Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    }
+                }
             },
         }
         pos += 1;

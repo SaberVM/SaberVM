@@ -66,6 +66,8 @@ pub enum Op1 {
     Import(u64, u64),
     Modulo,
     I32ToU8,
+    Read(u8),
+    Write(u8),
 }
 
 /// The type of unverified ops.
@@ -105,6 +107,8 @@ pub enum Op2 {
     ModuloI32,
     ModuloU8,
     I32ToU8,
+    Read(u8),
+    Write(u8),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -263,4 +267,5 @@ pub enum Error {
     DataSectionLoadOutOfBounds(Pos, Op1, usize, usize),
     InvalidDataSectionType(Pos, Op1, Type),
     CannotMutateDataSection(Pos, Op1),
+    UnknownChannel(Pos, Op1, u8)
 }

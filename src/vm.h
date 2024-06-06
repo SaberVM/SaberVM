@@ -10,6 +10,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/select.h>
+#include <sys/file.h>
+#include <signal.h>
 
 typedef uint64_t u64;
 typedef int64_t i64;
@@ -49,6 +54,13 @@ struct Stack {
     u8 data[STACK_CHUNK_SIZE];
 };
 
+typedef struct {
+    u32 f;
+    size_t param_size;
+    u8 param[16];
+    Pointer env;
+} Handler;
+
 /*
  * Allocate a new region.
  * The type system ensures memory is written to before it is read,
@@ -83,6 +95,11 @@ void free_object(Pointer ptr);
 void free_region(Region *r);
 
 /*
+ * The entry point.
+ */
+extern uint8_t vm_function(u8 instrs[]);
+
+/*
  * The actual VM implementation.
  */
-extern uint8_t vm_function(u8 instrs[], size_t instrs_len);
+u8 eval(u8 instrs[], u32 pc, u32 sp, u32 data_section_size, struct Stack *stack);

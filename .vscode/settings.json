@@ -12,6 +12,11 @@
   ],
   "C_Cpp.default.compilerPath": "/usr/bin/clang",
   "files.associations": {
-    "typeinfo": "c"
+    "typeinfo": "c",
+    "array": "c",
+    "hash_map": "c",
+    "string_view": "c",
+    "initializer_list": "c",
+    "utility": "c"
   }
 }

@@ -32,7 +32,7 @@ impl Pretty for Op1 {
             Op1::Proj(n) => "proj ".to_string() + &n.to_string(),
             Op1::Call => "call".to_string(),
             Op1::Print => "print".to_string(),
-            Op1::Lit(i) => i.to_string(),
+            Op1::Lit(i) => "lit ".to_string() + &i.to_string(),
             Op1::GlobalFunc(n) => "global_func ".to_string() + &n.to_string(),
             Op1::Halt => "halt".to_string(),
             Op1::Pack => "pack".to_string(),
@@ -58,6 +58,8 @@ impl Pretty for Op1 {
             Op1::Export(a, b) => "export ".to_string() + &int_pair_to_str(a, b),
             Op1::Modulo => "modulo".to_string(),
             Op1::I32ToU8 => "i32_to_u8".to_string(),
+            Op1::Read(c) => "read ".to_string() + &c.to_string(),
+            Op1::Write(c) => "write ".to_string() + &c.to_string(),
         }
     }
 }
@@ -102,6 +104,8 @@ impl Pretty for Op2 {
             Op2::ModuloI32 => "modulo_i32".to_string(),
             Op2::ModuloU8 => "modulo_u8".to_string(),
             Op2::I32ToU8 => "i32_to_u8".to_string(),
+            Op2::Read(c) => "read ".to_string() + &c.to_string(),
+            Op2::Write(c) => "write ".to_string() + &c.to_string(),
         }
     }
 }
@@ -173,3 +177,12 @@ impl Pretty for Kind {
     }
 }
 
+impl Pretty for CTStackVal {
+    fn pretty(&self) -> String {
+        match self {
+            CTStackVal::Region(r) => r.pretty(),
+            CTStackVal::Type(t) => t.pretty(),
+            CTStackVal::Size(s) => s.to_string(),
+        }
+    }
+}

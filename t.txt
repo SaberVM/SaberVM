@@ -242,19 +242,31 @@ function 12: forall r101: Rgn. (exists a104: 16byte. ((exists a105: 16byte. ((ex
 3385 get 56 4
 3402 call
 function 0: forall r0: Rgn. (handle(r0), i32)->0
-3403 lit 2
-3408 new_arr 1
-3417 get 16 4
-3434 lit 10
-3439 modulo_i32
-3440 lit 48
-3445 add_i32
-3446 i32_to_u8
-3447 lit 0
-3452 arr_mut 1
-3461 u8_lit 10
-3463 lit 1
-3468 arr_mut 1
-3477 print
-3478 u8_lit 0
-3480 halt
+3403 get 0 8
+3420 lit 2
+3425 new_arr 1
+3434 get 24 4
+3451 lit 10
+3456 modulo_i32
+3457 lit 48
+3462 add_i32
+3463 i32_to_u8
+3464 lit 0
+3469 arr_mut 1
+3478 u8_lit 10
+3480 lit 1
+3485 arr_mut 1
+3494 alloca 20
+3503 get 36 8
+3520 malloc 0
+3529 init 4 16 20
+3554 global_func 1
+3559 init 0 4 20
+3584 u8_lit 0
+3586 get 37 8
+3603 write 0
+3605 u8_lit 0
+3607 halt
+function 1: ()->0
+3608 u8_lit 0
+3610 halt
