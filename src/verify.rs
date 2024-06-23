@@ -155,6 +155,7 @@ pub fn definition_pass(
 
     loop {
         // dbg!(&compile_time_stack.iter().map(|v| v.pretty()).collect::<Vec<_>>());
+        // dbg!(&stack_type.iter().map(|v| v.pretty()).collect::<Vec<_>>());
         match ops_iter.next() {
             None => break,
             Some(op) => match op {
@@ -189,30 +190,34 @@ pub fn definition_pass(
                     handle_end(pos, op, &mut compile_time_stack, &mut quantification_stack)?
                 }
                 Op1::App => match compile_time_stack.pop() {
-                    Some(CTStackVal::Type(t_arg)) => match stack_type.pop() {
-                        Some(Type::Forall(id, s, t)) => {
-                            if s != t_arg.size() {
-                                return Err(Error::SizeError(pos, *op, s, t_arg.size()));
-                            }
-                            let new_t =
-                                substitute_t(&*t, &HashMap::from([(id, t_arg)]), &HashMap::new());
-                            stack_type.push(new_t);
+                    Some(CTStackVal::Type(t_arg)) => {
+                        let (id, s, t) = match stack_type.pop() {
+                            Some(Type::Forall(id, s, t)) => (id, s, t),
+                            Some(t) => return Err(Error::TypeErrorForallExpected(pos, *op, t)),
+                            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+                        };
+                        if s != t_arg.size() {
+                            return Err(Error::SizeError(pos, *op, s, t_arg.size()));
                         }
-                        Some(t) => return Err(Error::TypeErrorForallExpected(pos, *op, t)),
-                        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                    },
-                    Some(CTStackVal::Region(r_arg)) => match stack_type.pop() {
-                        Some(Type::ForallRegion(r, t, captured_rgns)) => {
-                            if r.unique && captured_rgns.iter().any(|r2| r_arg.id == r2.id) {
-                                return Err(Error::RegionAccessError(pos, *op, r_arg));
+                        let new_t =
+                            substitute_t(&*t, &HashMap::from([(id, t_arg)]), &HashMap::new());
+                        stack_type.push(new_t);
+                    }
+                    Some(CTStackVal::Region(r_arg)) => {
+                        let (r, t, captured_rgns) = match stack_type.pop() {
+                            Some(Type::ForallRegion(r, t, captured_rgns)) => (r, t, captured_rgns),
+                            Some(t) => {
+                                return Err(Error::TypeErrorForallRegionExpected(pos, *op, t))
                             }
-                            let new_t =
-                                substitute_t(&*t, &HashMap::new(), &HashMap::from([(r.id, r_arg)]));
-                            stack_type.push(new_t);
+                            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+                        };
+                        if r.unique && captured_rgns.iter().any(|r2| r_arg.id == r2.id) {
+                            return Err(Error::RegionAccessError(pos, *op, r_arg));
                         }
-                        Some(t) => return Err(Error::TypeErrorForallRegionExpected(pos, *op, t)),
-                        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                    },
+                        let new_t =
+                            substitute_t(&*t, &HashMap::new(), &HashMap::from([(r.id, r_arg)]));
+                        stack_type.push(new_t);
+                    }
                     Some(ctval) => return Err(Error::KindErrorBadApp(pos, *op, ctval)),
                     None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
                 },
@@ -221,13 +226,14 @@ pub fn definition_pass(
                 Op1::Lced => panic!("Lced should not appear in this context"),
                 Op1::Import(_, _) => panic!("Import should not appear in this context"),
                 Op1::Export(_, _) => panic!("Export should not appear in this context"),
-                Op1::Unpack => match stack_type.pop() {
-                    Some(Type::Exists(_id, _s, t)) => {
-                        stack_type.push(*t);
-                    }
-                    Some(t) => return Err(Error::TypeErrorExistentialExpected(pos, *op, t)),
-                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                },
+                Op1::Unpack => {
+                    let t = match stack_type.pop() {
+                        Some(Type::Exists(_id, _s, t)) => t,
+                        Some(t) => return Err(Error::TypeErrorExistentialExpected(pos, *op, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    };
+                    stack_type.push(*t);
+                }
                 Op1::Get(i) => {
                     let stack_len = stack_type.len();
                     if stack_len == 0 {
@@ -256,7 +262,11 @@ pub fn definition_pass(
                         &mut Vec<Type>,
                         &mut Vec<Op2>,
                     ) -> ()| {
-                        match component_types.get(usize::from(*i)) {
+                        let formal = match component_types.get(usize::from(*i)) {
+                            Some((false, formal)) => formal,
+                            Some((true, _t)) => {
+                                return Err(Error::TypeErrorDoubleInit(pos, *op, *i))
+                            }
                             None => {
                                 return Err(Error::TypeErrorInitOutOfRange(
                                     pos,
@@ -264,28 +274,18 @@ pub fn definition_pass(
                                     component_types.len(),
                                 ))
                             }
-                            Some((false, formal)) => match mb_val {
-                                None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                                Some(actual) => {
-                                    if type_eq(formal, &actual) {
-                                        g(
-                                            &actual,
-                                            component_types,
-                                            &mut stack_type,
-                                            &mut verified_ops,
-                                        );
-                                    } else {
-                                        return Err(Error::TypeErrorInitTypeMismatch(
-                                            pos,
-                                            formal.clone(),
-                                            actual,
-                                        ));
-                                    }
-                                }
-                            },
-                            Some((true, _t)) => {
-                                return Err(Error::TypeErrorDoubleInit(pos, *op, *i))
-                            }
+                        };
+                        let Some(actual) = mb_val else {
+                            return Err(Error::TypeErrorEmptyStack(pos, *op));
+                        };
+                        if type_eq(formal, &actual) {
+                            g(&actual, component_types, &mut stack_type, &mut verified_ops);
+                        } else {
+                            return Err(Error::TypeErrorInitTypeMismatch(
+                                pos,
+                                formal.clone(),
+                                actual,
+                            ));
                         }
                         Ok(())
                     };
@@ -307,25 +307,31 @@ pub fn definition_pass(
                                 verified_ops.push(Op2::Init(offset, actual.size(), tpl_size));
                             },
                         )?,
-                        Some(Type::Ptr(boxed_t, r)) => match *boxed_t {
-                            Type::Tuple(component_types) => {
-                                if rgn_vars.iter().all(|r2| r.id != r2.id) {
-                                    return Err(Error::RegionAccessError(pos, *op, r));
-                                }
-                                f(component_types, &|actual: &Type, mut component_types: Vec<(bool, Type)>, stack_type: &mut Vec<Type>, verified_ops: &mut Vec<Op2>| {
+                        Some(Type::Ptr(boxed_t, r)) => {
+                            let Type::Tuple(component_types) = *boxed_t else {
+                                return Err(Error::TypeErrorTupleExpected(pos, *op, *boxed_t));
+                            };
+                            if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                                return Err(Error::RegionAccessError(pos, *op, r));
+                            }
+                            f(
+                                component_types,
+                                &|actual: &Type,
+                                  mut component_types: Vec<(bool, Type)>,
+                                  stack_type: &mut Vec<Type>,
+                                  verified_ops: &mut Vec<Op2>| {
                                     let mut offset = 0;
                                     for i2 in 0..*i {
                                         let (_, t) = &component_types[i2 as usize];
                                         offset += t.size();
                                     }
                                     component_types[*i as usize] = (true, actual.clone());
-                                    stack_type.push(Type::Ptr(Box::new(Type::Tuple(component_types)), r));
-                                    verified_ops
-                                        .push(Op2::InitIP(offset, actual.size()));
-                                })?
-                            }
-                            t => return Err(Error::TypeErrorTupleExpected(pos, *op, t)),
-                        },
+                                    stack_type
+                                        .push(Type::Ptr(Box::new(Type::Tuple(component_types)), r));
+                                    verified_ops.push(Op2::InitIP(offset, actual.size()));
+                                },
+                            )?
+                        }
                         Some(t) => return Err(Error::TypeErrorTupleExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     }
@@ -334,32 +340,31 @@ pub fn definition_pass(
                     let mb_type = compile_time_stack.pop();
                     match mb_type {
                         Some(CTStackVal::Type(Type::Ptr(t, r))) => {
-                            match stack_type.pop() {
-                                Some(Type::Handle(r2)) => {
-                                    // check that t is in r and that r is in the list of declared regions
-                                    if r.id != r2.id {
-                                        return Err(Error::RegionError(pos, *op, r, r2));
-                                    }
-                                    if rgn_vars.iter().all(|r2: &Region| r.id != r2.id) {
-                                        return Err(Error::RegionAccessError(pos, *op, r));
-                                    }
-                                    let t = *t;
-                                    let size = t.size();
-                                    if let Type::Tuple(component_types) = t {
-                                        let mut ts = vec![];
-                                        for (_, t) in component_types {
-                                            ts.push((false, t));
-                                        }
-                                        stack_type.push(Type::Ptr(Box::new(Type::Tuple(ts)), r));
-                                        verified_ops.push(Op2::Malloc(size));
-                                    } else {
-                                        return Err(Error::TypeErrorMallocNonTuple(pos, *op, t));
-                                    }
-                                }
+                            let r2 = match stack_type.pop() {
+                                Some(Type::Handle(r2)) => r2,
                                 Some(t) => {
                                     return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t));
                                 }
                                 None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                            };
+                            // check that t is in r and that r is in the list of declared regions
+                            if r.id != r2.id {
+                                return Err(Error::RegionError(pos, *op, r, r2));
+                            }
+                            if rgn_vars.iter().all(|r2: &Region| r.id != r2.id) {
+                                return Err(Error::RegionAccessError(pos, *op, r));
+                            }
+                            let t = *t;
+                            let size = t.size();
+                            if let Type::Tuple(component_types) = t {
+                                let mut ts = vec![];
+                                for (_, t) in component_types {
+                                    ts.push((false, t));
+                                }
+                                stack_type.push(Type::Ptr(Box::new(Type::Tuple(ts)), r));
+                                verified_ops.push(Op2::Malloc(size));
+                            } else {
+                                return Err(Error::TypeErrorMallocNonTuple(pos, *op, t));
                             }
                         }
                         Some(CTStackVal::Type(Type::Tuple(component_types))) => {
@@ -375,34 +380,36 @@ pub fn definition_pass(
                             stack_type.push(t);
                             verified_ops.push(Op2::Alloca(size));
                         }
-                        Some(CTStackVal::Type(Type::Array(t, r))) => match stack_type.pop() {
-                            Some(Type::I32) => match stack_type.pop() {
+                        Some(CTStackVal::Type(Type::Array(t, r))) => {
+                            match stack_type.pop() {
+                                Some(Type::I32) => {} // success
+                                Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                                None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+                            }
+                            match stack_type.pop() {
                                 Some(Type::Handle(r2)) if r2.id != r.id => {
                                     return Err(Error::RegionError(pos, *op, r, r2))
                                 }
-                                Some(Type::Handle(_r)) => {
-                                    if rgn_vars.iter().all(|r2: &Region| r.id != r2.id) {
-                                        return Err(Error::RegionAccessError(pos, *op, r));
-                                    }
-                                    let size = (*t).size();
-                                    stack_type.push(Type::Array(t, r));
-                                    verified_ops.push(Op2::NewArr(size));
-                                }
+                                Some(Type::Handle(_r)) => {} // success
                                 Some(t) => {
                                     return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t))
                                 }
                                 None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                            },
-                            Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
-                            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                        },
+                            }
+                            if rgn_vars.iter().all(|r2: &Region| r.id != r2.id) {
+                                return Err(Error::RegionAccessError(pos, *op, r));
+                            }
+                            let size = (*t).size();
+                            stack_type.push(Type::Array(t, r));
+                            verified_ops.push(Op2::NewArr(size));
+                        }
                         Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
                         None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
                     };
                 }
                 Op1::Proj(i) => {
-                    let mb_tpl = stack_type.pop();
                     let mut f = |component_types: Vec<(bool, Type)>,
+                                 mut stack_type: &mut Vec<Type>,
                                  g: &dyn Fn(
                         &Type,
                         usize,
@@ -412,7 +419,11 @@ pub fn definition_pass(
                     ) -> ()| {
                         let s: usize = component_types.iter().map(|(_, t)| t.size()).sum();
                         let mb_t = component_types.get(usize::from(*i)).cloned();
-                        match mb_t {
+                        let t = match mb_t {
+                            Some((true, t)) => t,
+                            Some((false, _)) => {
+                                return Err(Error::TypeErrorUninitializedRead(pos, *op, *i))
+                            }
                             None => {
                                 return Err(Error::TypeErrorProjOutOfRange(
                                     pos,
@@ -420,80 +431,68 @@ pub fn definition_pass(
                                     component_types.len(),
                                 ))
                             }
-                            Some((true, t)) => {
-                                g(&t, s, &mut stack_type, &mut verified_ops, component_types)
-                            }
-                            Some((false, _)) => {
-                                return Err(Error::TypeErrorUninitializedRead(pos, *op, *i))
-                            }
-                        }
+                        };
+                        g(&t, s, &mut stack_type, &mut verified_ops, component_types);
                         Ok(())
                     };
-                    match mb_tpl {
-                        Some(tpl) => match tpl {
-                            Type::Tuple(component_types) => {
-                                f(component_types, &|t: &Type, s: usize, stack_type: &mut Vec<Type>, verified_ops: &mut Vec<Op2>, component_types: Vec<(bool, Type)>| {
-                                    let mut offset = 0;
-                                    for i2 in 0..*i {
-                                        let (_, t) = &component_types[i2 as usize];
-                                        offset += t.size();
-                                    }
-                                    stack_type.push(t.clone());
-                                    verified_ops.push(Op2::Proj(offset, t.size(), s));
-                                })?;
-                            }
-                            Type::Ptr(boxed_t, r) => {
-                                if r.id == RgnId::DataSection {
-                                    return Err(Error::ReadOnlyRegionError(pos, *op, r.id));
-                                } else if rgn_vars.iter().all(|r2| r.id != r2.id) {
-                                    return Err(Error::RegionAccessError(pos, *op, r));
+                    let Some(tpl) = stack_type.pop() else {
+                        return Err(Error::TypeErrorEmptyStack(pos, *op));
+                    };
+                    match tpl {
+                        Type::Tuple(component_types) => {
+                            f(component_types, &mut stack_type, &|t: &Type, s: usize, stack_type: &mut Vec<Type>, verified_ops: &mut Vec<Op2>, component_types: Vec<(bool, Type)>| {
+                                let mut offset = 0;
+                                for i2 in 0..*i {
+                                    let (_, t) = &component_types[i2 as usize];
+                                    offset += t.size();
                                 }
-                                match *boxed_t {
-                                    Type::Tuple(component_types) => {
-                                        f(component_types, &|t: &Type, _s: usize, stack_type: &mut Vec<Type>, verified_ops: &mut Vec<Op2>, component_types: Vec<(bool, Type)>| {
-                                            let mut offset = 0;
-                                            for i2 in 0..*i {
-                                                let (_, t) = &component_types[i2 as usize];
-                                                offset += t.size();
-                                            }
-                                            stack_type.push(t.clone());
-                                            verified_ops.push(Op2::ProjIP(offset, t.size()));
-                                        })?;
-                                    }
-                                    t => return Err(Error::TypeErrorTupleExpected(pos, *op, t)),
-                                }
+                                stack_type.push(t.clone());
+                                verified_ops.push(Op2::Proj(offset, t.size(), s));
+                            })?;
+                        }
+                        Type::Ptr(boxed_t, r) => {
+                            if r.id == RgnId::DataSection {
+                                return Err(Error::ReadOnlyRegionError(pos, *op, r.id));
+                            } else if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                                return Err(Error::RegionAccessError(pos, *op, r));
                             }
-                            t => return Err(Error::TypeErrorTupleExpected(pos, *op, t)),
-                        },
-                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                            let Type::Tuple(component_types) = *boxed_t else {
+                                return Err(Error::TypeErrorTupleExpected(pos, *op, *boxed_t));
+                            };
+                            f(component_types, &mut stack_type, &|t: &Type, _s: usize, stack_type: &mut Vec<Type>, verified_ops: &mut Vec<Op2>, component_types: Vec<(bool, Type)>| {
+                                let mut offset = 0;
+                                for i2 in 0..*i {
+                                    let (_, t) = &component_types[i2 as usize];
+                                    offset += t.size();
+                                }
+                                stack_type.push(t.clone());
+                                verified_ops.push(Op2::ProjIP(offset, t.size()));
+                            })?;
+                        }
+                        t => return Err(Error::TypeErrorTupleExpected(pos, *op, t)),
                     }
                 }
                 Op1::Call => {
-                    match stack_type.pop() {
-                        Some(t) => handle_call(
-                            pos,
-                            &t,
-                            &mut stack_type,
-                            &mut compile_time_stack,
-                            Op1::Call,
-                        )?,
-                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    }
+                    let Some(t) = stack_type.pop() else {
+                        return Err(Error::TypeErrorEmptyStack(pos, *op));
+                    };
+                    handle_call(pos, &t, &mut stack_type, &mut compile_time_stack, Op1::Call)?;
                     verified_ops.push(Op2::Call)
                 }
-                Op1::Print => match stack_type.pop() {
-                    Some(Type::Array(t, r)) => {
-                        if *t != Type::U8 {
-                            return Err(Error::TypeError(pos, *op, Type::U8, *t));
-                        }
-                        if rgn_vars.iter().all(|r2| r.id != r2.id) {
-                            return Err(Error::RegionAccessError(pos, *op, r));
-                        }
-                        verified_ops.push(Op2::Print);
-                    }
-                    Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
-                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                },
+                Op1::Print => {
+                    panic!("op `print` no longer supported. Use `write` instead, targetting the console.");
+                    // Some(Type::Array(t, r)) => {
+                    //     if *t != Type::U8 {
+                    //         return Err(Error::TypeError(pos, *op, Type::U8, *t));
+                    //     }
+                    //     if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                    //         return Err(Error::RegionAccessError(pos, *op, r));
+                    //     }
+                    //     verified_ops.push(Op2::Print);
+                    // }
+                    // Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
+                    // None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                }
                 Op1::Lit(lit) => {
                     stack_type.push(Type::I32);
                     verified_ops.push(Op2::Lit(*lit))
@@ -510,51 +509,46 @@ pub fn definition_pass(
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
-                Op1::Pack => match stack_type.pop() {
-                    Some(type_of_hidden) => match compile_time_stack.pop() {
-                        Some(CTStackVal::Type(hidden_type)) => match compile_time_stack.pop() {
-                            Some(CTStackVal::Type(Type::Exists(
-                                id,
-                                size_of_hidden,
-                                existential_type,
-                            ))) => {
-                                // dbg!(&type_of_hidden.pretty());
-                                if size_of_hidden != hidden_type.size() {
-                                    return Err(Error::SizeError(
-                                        pos,
-                                        *op,
-                                        size_of_hidden,
-                                        type_of_hidden.size(),
-                                    ));
-                                }
-                                let unpacked_type = substitute_t(
-                                    &existential_type,
-                                    &HashMap::from([(id, hidden_type)]),
-                                    &HashMap::new(),
-                                );
-                                if !type_eq(&type_of_hidden, &unpacked_type) {
-                                    return Err(Error::TypeError(
-                                        pos,
-                                        *op,
-                                        unpacked_type,
-                                        type_of_hidden,
-                                    ));
-                                }
-                                stack_type.push(Type::Exists(id, size_of_hidden, existential_type));
-                            }
-                            Some(CTStackVal::Type(t)) => {
-                                return Err(Error::TypeErrorExistentialExpected(pos, *op, t))
-                            }
-                            Some(ctval) => {
-                                return Err(Error::KindError(pos, *op, Kind::Type, ctval))
-                            }
-                            None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                        },
+                Op1::Pack => {
+                    let Some(type_of_hidden) = stack_type.pop() else {
+                        return Err(Error::TypeErrorEmptyStack(pos, *op));
+                    };
+                    let hidden_type = match compile_time_stack.pop() {
+                        Some(CTStackVal::Type(t)) => t,
                         Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
                         None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
-                    },
-                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                },
+                    };
+                    let (id, size_of_hidden, existential_type) = match compile_time_stack.pop() {
+                        Some(CTStackVal::Type(Type::Exists(
+                            id,
+                            size_of_hidden,
+                            existential_type,
+                        ))) => (id, size_of_hidden, existential_type),
+                        Some(CTStackVal::Type(t)) => {
+                            return Err(Error::TypeErrorExistentialExpected(pos, *op, t))
+                        }
+                        Some(ctval) => return Err(Error::KindError(pos, *op, Kind::Type, ctval)),
+                        None => return Err(Error::TypeErrorEmptyCTStack(pos, *op)),
+                    };
+                    // dbg!(&type_of_hidden.pretty());
+                    if size_of_hidden != hidden_type.size() {
+                        return Err(Error::SizeError(
+                            pos,
+                            *op,
+                            size_of_hidden,
+                            type_of_hidden.size(),
+                        ));
+                    }
+                    let unpacked_type = substitute_t(
+                        &existential_type,
+                        &HashMap::from([(id, hidden_type)]),
+                        &HashMap::new(),
+                    );
+                    if !type_eq(&type_of_hidden, &unpacked_type) {
+                        return Err(Error::TypeError(pos, *op, unpacked_type, type_of_hidden));
+                    }
+                    stack_type.push(Type::Exists(id, size_of_hidden, existential_type));
+                }
                 Op1::Size(s) => compile_time_stack.push(CTStackVal::Size((*s).try_into().unwrap())),
                 Op1::NewRgn(size) => {
                     let id = Id(*label, fresh_id);
@@ -568,161 +562,174 @@ pub fn definition_pass(
                     compile_time_stack.push(CTStackVal::Region(r));
                     verified_ops.push(Op2::NewRgn((*size).try_into().unwrap()));
                 }
-                Op1::FreeRgn => match stack_type.pop() {
-                    Some(Type::Handle(r)) => match rgn_vars.iter().find(|r2| r.id == r2.id) {
-                        Some(r2) if r2.unique => {
-                            rgn_vars.retain(|r2| r2.id != r.id);
-                            verified_ops.push(Op2::FreeRgn)
-                        }
+                Op1::FreeRgn => {
+                    let r = match stack_type.pop() {
+                        Some(Type::Handle(r)) => r,
+                        Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    };
+                    let r2 = match rgn_vars.iter().find(|r2| r.id == r2.id) {
+                        Some(r2) if r2.unique => r2,
                         Some(_r2) => return Err(Error::UniquenessError(pos, *op, r)),
                         None => return Err(Error::RegionAccessError(pos, *op, r)),
-                    },
-                    Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
-                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                },
+                    };
+                    rgn_vars.retain(|r2| r2.id != r.id);
+                    verified_ops.push(Op2::FreeRgn);
+                }
                 Op1::Ptr => handle_ptr(pos, op, &mut compile_time_stack)?,
-                Op1::Deref => match stack_type.pop() {
-                    Some(Type::Ptr(t, r)) => {
-                        if rgn_vars.iter().all(|r2| r.id != r2.id) {
-                            return Err(Error::RegionAccessError(pos, *op, r));
-                        }
-                        let size = t.size();
-                        if size > 4096 {
-                            return Err(Error::TooBigForStack(pos, *op, *t));
-                        }
-                        stack_type.push(*t);
-                        verified_ops.push(Op2::Deref(size));
+                Op1::Deref => {
+                    let (t, r) = match stack_type.pop() {
+                        Some(Type::Ptr(t, r)) => (t, r),
+                        Some(t) => return Err(Error::TypeErrorPtrExpected(pos, *op, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    };
+                    if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                        return Err(Error::RegionAccessError(pos, *op, r));
                     }
-                    Some(t) => return Err(Error::TypeErrorPtrExpected(pos, *op, t)),
-                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                },
+                    let size = t.size();
+                    if size > 4096 {
+                        return Err(Error::TooBigForStack(pos, *op, *t));
+                    }
+                    stack_type.push(*t);
+                    verified_ops.push(Op2::Deref(size));
+                }
                 Op1::Arr => handle_arr(pos, op, &mut compile_time_stack)?,
-                Op1::ArrMut => match stack_type.pop() {
-                    Some(Type::I32) => match stack_type.pop() {
-                        Some(t) => match stack_type.pop() {
-                            Some(Type::Array(_, r)) if r.id == DataSection => {
-                                return Err(Error::CannotMutateDataSection(pos, *op));
-                            }
-                            Some(Type::Array(t2, r)) if type_eq(&t, &t2) => {
-                                if rgn_vars.iter().all(|r2| r2.id != r.id) {
-                                    return Err(Error::RegionAccessError(pos, *op, r));
-                                }
-                                let size = t.size();
-                                stack_type.push(Type::Array(Box::new(t), r));
-                                verified_ops.push(Op2::ArrMut(size))
-                            }
-                            Some(Type::Array(t2, _)) => {
-                                return Err(Error::TypeError(pos, *op, t, *t2))
-                            }
-                            Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
-                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                        },
-                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    },
-                    Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
-                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                },
-                Op1::ArrProj => match stack_type.pop() {
-                    Some(Type::I32) => match stack_type.pop() {
-                        Some(Type::Array(t, r)) => {
-                            if rgn_vars.iter().all(|r2| r2.id != r.id) {
-                                return Err(Error::RegionAccessError(pos, *op, r));
-                            }
-                            let t = *t;
-                            stack_type.push(t.clone());
-                            if r.id == DataSection {
-                                verified_ops.push(Op2::DataIndex(t.size()))
-                            } else {
-                                verified_ops.push(Op2::ArrProj(t.size()))
-                            }
-                        }
-                        Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
-                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    },
-                    Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
-                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                },
-                Op1::Add => match stack_type.pop() {
-                    Some(Type::I32) => match stack_type.pop() {
-                        Some(Type::I32) => {
-                            stack_type.push(Type::I32);
-                            verified_ops.push(Op2::AddI32);
-                        }
+                Op1::ArrMut => {
+                    match stack_type.pop() {
+                        Some(Type::I32) => {} // success
                         Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    },
-                    Some(Type::U8) => match stack_type.pop() {
-                        Some(Type::U8) => {
-                            stack_type.push(Type::U8);
-                            verified_ops.push(Op2::AddU8);
+                    };
+                    let Some(t) = stack_type.pop() else {
+                        return Err(Error::TypeErrorEmptyStack(pos, *op));
+                    };
+                    let r = match stack_type.pop() {
+                        Some(Type::Array(_, r)) if r.id == DataSection => {
+                            return Err(Error::CannotMutateDataSection(pos, *op));
                         }
-                        Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
+                        Some(Type::Array(t2, r)) if type_eq(&t, &t2) => r,
+                        Some(Type::Array(t2, _)) => return Err(Error::TypeError(pos, *op, t, *t2)),
+                        Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    },
+                    };
+                    if rgn_vars.iter().all(|r2| r2.id != r.id) {
+                        return Err(Error::RegionAccessError(pos, *op, r));
+                    }
+                    let size = t.size();
+                    stack_type.push(Type::Array(Box::new(t), r));
+                    verified_ops.push(Op2::ArrMut(size))
+                }
+                Op1::ArrProj => {
+                    match stack_type.pop() {
+                        Some(Type::I32) => {} // success
+                        Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    };
+                    let (t, r) = match stack_type.pop() {
+                        Some(Type::Array(t, r)) => (t, r),
+                        Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    };
+                    if rgn_vars.iter().all(|r2| r2.id != r.id) {
+                        return Err(Error::RegionAccessError(pos, *op, r));
+                    }
+                    let t = *t;
+                    stack_type.push(t.clone());
+                    if r.id == DataSection {
+                        verified_ops.push(Op2::DataIndex(t.size()))
+                    } else {
+                        verified_ops.push(Op2::ArrProj(t.size()))
+                    }
+                }
+                Op1::Add => match stack_type.pop() {
+                    Some(Type::I32) => {
+                        match stack_type.pop() {
+                            Some(Type::I32) => {} // success
+                            Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                        };
+                        stack_type.push(Type::I32);
+                        verified_ops.push(Op2::AddI32);
+                    }
+                    Some(Type::U8) => {
+                        match stack_type.pop() {
+                            Some(Type::U8) => {} // success
+                            Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                        };
+                        stack_type.push(Type::U8);
+                        verified_ops.push(Op2::AddU8);
+                    }
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
                 Op1::Mul => match stack_type.pop() {
-                    Some(Type::I32) => match stack_type.pop() {
-                        Some(Type::I32) => {
-                            stack_type.push(Type::I32);
-                            verified_ops.push(Op2::MulI32);
+                    Some(Type::I32) => {
+                        match stack_type.pop() {
+                            Some(Type::I32) => {} // success
+                            Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                         }
-                        Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
-                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    },
-                    Some(Type::U8) => match stack_type.pop() {
-                        Some(Type::U8) => {
-                            stack_type.push(Type::U8);
-                            verified_ops.push(Op2::MulU8);
+                        stack_type.push(Type::I32);
+                        verified_ops.push(Op2::MulI32);
+                    }
+                    Some(Type::U8) => {
+                        match stack_type.pop() {
+                            Some(Type::U8) => {} // success
+                            Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                         }
-                        Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
-                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    },
+                        stack_type.push(Type::U8);
+                        verified_ops.push(Op2::MulU8);
+                    }
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
                 Op1::Div => match stack_type.pop() {
-                    Some(Type::I32) => match stack_type.pop() {
-                        Some(Type::I32) => {
-                            stack_type.push(Type::I32);
-                            verified_ops.push(Op2::DivI32);
+                    Some(Type::I32) => {
+                        match stack_type.pop() {
+                            Some(Type::I32) => {} // success
+                            Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                         }
-                        Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
-                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    },
-                    Some(Type::U8) => match stack_type.pop() {
-                        Some(Type::U8) => {
-                            stack_type.push(Type::U8);
-                            verified_ops.push(Op2::DivU8);
+                        stack_type.push(Type::I32);
+                        verified_ops.push(Op2::DivI32);
+                    }
+                    Some(Type::U8) => {
+                        match stack_type.pop() {
+                            Some(Type::U8) => {} // success
+                            Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                         }
-                        Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
-                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    },
+                        stack_type.push(Type::U8);
+                        verified_ops.push(Op2::DivU8);
+                    }
                     Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
                     None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                 },
-                Op1::CallNZ => match stack_type.pop() {
-                    Some(t1) => match stack_type.pop() {
-                        Some(t2) if type_eq(&t1, &t2) => match stack_type.pop() {
-                            Some(Type::I32) => {
-                                handle_call(
-                                    pos,
-                                    &t1,
-                                    &mut stack_type,
-                                    &mut compile_time_stack,
-                                    Op1::CallNZ,
-                                )?;
-                                verified_ops.push(Op2::CallNZ);
-                            }
-                            Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
-                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                        },
+                Op1::CallNZ => {
+                    let Some(t1) = stack_type.pop() else {
+                        return Err(Error::TypeErrorEmptyStack(pos, *op));
+                    };
+                    match stack_type.pop() {
+                        Some(t2) if type_eq(&t1, &t2) => {} // success
                         Some(t2) => return Err(Error::TypeError(pos, *op, t1, t2)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    },
-                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                },
+                    };
+                    match stack_type.pop() {
+                        Some(Type::I32) => {} // success
+                        Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    };
+                    handle_call(
+                        pos,
+                        &t1,
+                        &mut stack_type,
+                        &mut compile_time_stack,
+                        Op1::CallNZ,
+                    )?;
+                    verified_ops.push(Op2::CallNZ);
+                }
                 Op1::Data(loc) => match compile_time_stack.pop() {
                     Some(CTStackVal::Type(Type::Array(t, r))) if r.id == DataSection => {
                         let loc = *loc as usize;
@@ -765,34 +772,37 @@ pub fn definition_pass(
                 Op1::U8 => {
                     compile_time_stack.push(CTStackVal::Type(Type::U8));
                 }
-                Op1::CopyN => match stack_type.pop() {
-                    Some(Type::I32) => match stack_type.pop() {
-                        Some(Type::Array(t, r)) => match stack_type.pop() {
-                            Some(Type::Array(t2, r2)) if type_eq(&t, &t2) => {
-                                if r2.id == DataSection {
-                                    return Err(Error::CannotMutateDataSection(pos, *op));
-                                }
-                                if rgn_vars.iter().all(|r2| r.id != r2.id) {
-                                    return Err(Error::RegionAccessError(pos, *op, r));
-                                }
-                                if rgn_vars.iter().all(|r| r.id != r2.id) {
-                                    return Err(Error::RegionAccessError(pos, *op, r2));
-                                }
-                                verified_ops.push(Op2::CopyN(t.size()));
-                                stack_type.push(Type::Array(t, r));
-                            }
-                            Some(Type::Array(t2, _)) => {
-                                return Err(Error::TypeError(pos, *op, *t, *t2))
-                            }
-                            Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
-                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                        },
+                Op1::CopyN => {
+                    match stack_type.pop() {
+                        Some(Type::I32) => {} // success
+                        Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    };
+                    let (t, r) = match stack_type.pop() {
+                        Some(Type::Array(t, r)) => (t, r),
                         Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                    },
-                    Some(t) => return Err(Error::TypeError(pos, *op, Type::I32, t)),
-                    None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                },
+                    };
+                    let r2 = match stack_type.pop() {
+                        Some(Type::Array(t2, r2)) if type_eq(&t, &t2) => r2,
+                        Some(Type::Array(t2, _)) => {
+                            return Err(Error::TypeError(pos, *op, *t, *t2))
+                        }
+                        Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    };
+                    if r2.id == DataSection {
+                        return Err(Error::CannotMutateDataSection(pos, *op));
+                    }
+                    if rgn_vars.iter().all(|r2| r.id != r2.id) {
+                        return Err(Error::RegionAccessError(pos, *op, r));
+                    }
+                    if rgn_vars.iter().all(|r| r.id != r2.id) {
+                        return Err(Error::RegionAccessError(pos, *op, r2));
+                    }
+                    verified_ops.push(Op2::CopyN(t.size()));
+                    stack_type.push(Type::Array(t, r));
+                }
                 Op1::U8Lit(n) => {
                     stack_type.push(Type::U8);
                     verified_ops.push(Op2::U8Lit(*n));
@@ -837,62 +847,65 @@ pub fn definition_pass(
                     let t = match c {
                         0 => match stack_type.pop() {
                             Some(Type::Handle(r)) => Type::Array(Box::new(Type::U8), r),
-                            Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
-                            None => return Err(Error::TypeErrorEmptyStack(pos, *op))
-                        }
-                        _ => return Err(Error::UnknownChannel(pos, *op, *c))
-                    };
-                    match stack_type.pop() {
-                        Some(Type::Exists(a, 16, body)) => {
-                            let body2 = Type::Tuple(vec![
-                                (true, Type::Func(vec![t, Type::Var(a, 16)])),
-                                (true, Type::Var(a, 16)),
-                            ]);
-                            if type_eq(&*body, &body2) {
-                                verified_ops.push(Op2::Read(*c));
-                            } else {
-                                return Err(Error::TypeError(pos, *op, body2, *body))
+                            Some(t) => {
+                                return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t))
                             }
-                        }
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                        },
+                        _ => return Err(Error::UnknownChannel(pos, *op, *c)),
+                    };
+                    let (a, body) = match stack_type.pop() {
+                        Some(Type::Exists(a, 16, body)) => (a, body),
                         Some(t) => return Err(Error::TypeErrorExistentialExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    };
+                    let body2 = Type::Tuple(vec![
+                        (true, Type::Func(vec![t, Type::Var(a, 16)])),
+                        (true, Type::Var(a, 16)),
+                    ]);
+                    if type_eq(&*body, &body2) {
+                        verified_ops.push(Op2::Read(*c));
+                    } else {
+                        return Err(Error::TypeError(pos, *op, body2, *body));
                     }
                 }
                 Op1::Write(c) => {
                     let t = match c {
                         0 => match stack_type.pop() {
                             Some(Type::Handle(r)) => Type::Array(Box::new(Type::U8), r),
-                            Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
-                            None => return Err(Error::TypeErrorEmptyStack(pos, *op))
-                        }
-                        _ => return Err(Error::UnknownChannel(pos, *op, *c)),
-                    };
-                    match stack_type.pop() {
-                        Some(Type::U8) => match stack_type.pop() {
-                            Some(Type::Exists(a, 16, body)) => {
-                                let body2 = Type::Tuple(vec![
-                                    (true, Type::Func(vec![Type::Var(a, 16)])),
-                                    (true, Type::Var(a, 16)),
-                                ]);
-                                if type_eq(&*body, &body2) {
-                                    match stack_type.pop() {
-                                        Some(t2) if type_eq(&t, &t2) => {
-                                            verified_ops.push(Op2::Write(*c));
-                                        }
-                                        Some(t2) => return Err(Error::TypeError(pos, *op, t, t2)),
-                                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                                    }
-                                } else {
-                                    return Err(Error::TypeError(pos, *op, body2, *body))
-                                }
-                            }
                             Some(t) => {
-                                return Err(Error::TypeErrorExistentialExpected(pos, *op, t))
+                                return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t))
                             }
                             None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                         },
+                        _ => return Err(Error::UnknownChannel(pos, *op, *c)),
+                    };
+                    match stack_type.pop() {
+                        Some(Type::U8) => {} // success
                         Some(t) => return Err(Error::TypeError(pos, *op, Type::U8, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    };
+                    let (a, body) = match stack_type.pop() {
+                        Some(Type::Exists(a, 16, body)) => (a, body),
+                        Some(t) => {
+                            return Err(Error::TypeErrorExistentialExpected(pos, *op, t))
+                        }
+                        None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                    };
+                    let body2 = Type::Tuple(vec![
+                        (true, Type::Func(vec![Type::Var(a, 16)])),
+                        (true, Type::Var(a, 16)),
+                    ]);
+                    if type_eq(&*body, &body2) {
+                        match stack_type.pop() {
+                            Some(t2) if type_eq(&t, &t2) => {
+                                verified_ops.push(Op2::Write(*c));
+                            }
+                            Some(t2) => return Err(Error::TypeError(pos, *op, t, t2)),
+                            None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
+                        }
+                    } else {
+                        return Err(Error::TypeError(pos, *op, body2, *body));
                     }
                 }
             },
