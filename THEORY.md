@@ -44,6 +44,7 @@ In this formalization, `get` isn't indexed by some $i$ as you might expect; it's
 The `app` and `pack` opcodes we mentioned above have denotations with the following type signatures:
 $$\texttt{app}_{\sigma,s,a:s}:\sigma\oplus[\forall x:s.A]\rightarrow M(\sigma\oplus[A\{x\mapsto a\}])$$
 $$\texttt{pack}_{\sigma,s,a:s}:\sigma\oplus [A\{x\mapsto a\}]\rightarrow M(\sigma\oplus[\exists x:s.A])$$
+
 Which just comes from the transformation of $T$-morphisms into $C$-morphisms.
 
 Note that morphisms a user might want in $T$ have to be CPS-converted to get the corresponding morphisms in $C$, if that morphism isn't accessible via the denotations of the opcodes. This CPS conversion is very different from the stackification transformation to produce the opcodes of $C$ from morphisms in $T$, and affects the type signature and way of calling the morphism a lot.
