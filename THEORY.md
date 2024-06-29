@@ -80,4 +80,6 @@ Which just comes from the transformation of $T$-morphisms into $C$-morphisms.
 
 Note that morphisms a user might want in $T$ have to be CPS-converted to get the corresponding morphisms in $C$, if that morphism isn't accessible via the denotations of the opcodes. This CPS conversion is very different from the stackification transformation to produce the opcodes of $C$ from morphisms in $T$, and affects the type signature and way of calling the morphism a lot.
 
+TODO: Reformalize these ugly type-lists into the proper monoidal category representing them, where types become morphisms and list appending becomes morphism composition. These type-list-transforming opcodes I've just formalized are then transforming morphisms in that monoidal category. Maybe they could just be Kleisli 2-cells but I'm not sure if that's valid yet; more research required. This would make it harder to have a list in a type, which is fine for (co)products but complicates exponentials. Maybe this isn't worth it, unless something very clean appears.
+
 TODO: regions! Or more generally, a better formalization of the monad $M$, that can lead to a memory safety proof for SaberVM regions.
