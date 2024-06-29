@@ -126,7 +126,7 @@ fn op_to_bytes(op: &Op2) -> Vec<u8> {
         ]
         .concat(),
         Op2::Call => vec![7],
-        Op2::Print => vec![8],
+        // Op2::Print => vec![8],
         Op2::Lit(lit) => [vec![9], lit.to_le_bytes().to_vec()].concat(),
         Op2::GlobalFunc(label) => [vec![10], label.to_le_bytes().to_vec()].concat(),
         Op2::Halt => vec![11],
@@ -167,7 +167,7 @@ fn op_len(op: &Op2) -> usize {
         Op2::Proj(_, _, _) => 1 + 8 + 8 + 8,
         Op2::ProjIP(_, _) => 1 + 8 + 8,
         Op2::Call => 1,
-        Op2::Print => 1,
+        // Op2::Print => 1,
         Op2::Lit(_) => 1 + 4,
         Op2::GlobalFunc(_) => 1 + 4,
         Op2::Halt => 1,

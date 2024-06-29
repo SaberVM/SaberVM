@@ -479,8 +479,8 @@ pub fn definition_pass(
                     handle_call(pos, &t, &mut stack_type, &mut compile_time_stack, Op1::Call)?;
                     verified_ops.push(Op2::Call)
                 }
-                Op1::Print => {
-                    panic!("op `print` no longer supported. Use `write` instead, targetting the console.");
+                // Op1::Print => {
+                //     panic!("op `print` no longer supported. Use `write` instead, targetting the console.");
                     // Some(Type::Array(t, r)) => {
                     //     if *t != Type::U8 {
                     //         return Err(Error::TypeError(pos, *op, Type::U8, *t));
@@ -492,7 +492,7 @@ pub fn definition_pass(
                     // }
                     // Some(t) => return Err(Error::TypeErrorArrayExpected(pos, *op, t)),
                     // None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
-                }
+                // }
                 Op1::Lit(lit) => {
                     stack_type.push(Type::I32);
                     verified_ops.push(Op2::Lit(*lit))
@@ -568,8 +568,8 @@ pub fn definition_pass(
                         Some(t) => return Err(Error::TypeErrorRegionHandleExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     };
-                    let r2 = match rgn_vars.iter().find(|r2| r.id == r2.id) {
-                        Some(r2) if r2.unique => r2,
+                    match rgn_vars.iter().find(|r2| r.id == r2.id) {
+                        Some(r2) if r2.unique => {} // success
                         Some(_r2) => return Err(Error::UniquenessError(pos, *op, r)),
                         None => return Err(Error::RegionAccessError(pos, *op, r)),
                     };
@@ -887,9 +887,7 @@ pub fn definition_pass(
                     };
                     let (a, body) = match stack_type.pop() {
                         Some(Type::Exists(a, 16, body)) => (a, body),
-                        Some(t) => {
-                            return Err(Error::TypeErrorExistentialExpected(pos, *op, t))
-                        }
+                        Some(t) => return Err(Error::TypeErrorExistentialExpected(pos, *op, t)),
                         None => return Err(Error::TypeErrorEmptyStack(pos, *op)),
                     };
                     let body2 = Type::Tuple(vec![

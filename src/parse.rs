@@ -88,7 +88,7 @@ fn lex(bytes: &ByteStream) -> Result<(Vec<u8>, LexedOpcodes, u32), Error> {
                     Some(n) => Op1::Proj(*n),
                 },
                 0x11 => Op1::Call,
-                0x12 => Op1::Print,
+                // 0x12 => Op1::Print,
                 0x13 => {
                     let mut n = [0u8, 0, 0, 0];
                     for i in 0..4 {
